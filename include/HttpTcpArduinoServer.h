@@ -1,5 +1,5 @@
-#ifndef HTTPTCPSERVER_H
-#define HTTPTCPSERVER_H
+#ifndef HttpTcpArduinoServer_H
+#define HttpTcpArduinoServer_H
 
 #include "IServer.h"
 #include "IHttpRequest.h"
@@ -57,21 +57,21 @@ class HttpTcpArduinoServer : public IServer {
         sentMessageCount_++;
     }
 
-    Public HttpTcpServer() 
+    Public HttpTcpArduinoServer() 
         : port_(DEFAULT_SERVER_PORT), serverSocket_(-1), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
           maxMessageSize_(88192), receiveTimeout_(0) {
     }
 
-    Public HttpTcpServer(CUInt port) 
+    Public HttpTcpArduinoServer(CUInt port) 
         : port_(port), serverSocket_(-1), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
           maxMessageSize_(88192), receiveTimeout_(0) {
     }
 
-    Public Virtual ~HttpTcpServer() {
+    Public Virtual ~HttpTcpArduinoServer() {
         Stop();
     }
 
@@ -366,5 +366,5 @@ class HttpTcpArduinoServer : public IServer {
     }
 };
 
-#endif // HTTPTCPSERVER_H
+#endif // HttpTcpArduinoServer_H
 
