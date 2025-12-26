@@ -3,22 +3,36 @@
 
 #include "IServer.h"
 #include "IHttpRequest.h"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <cstring>
-#include <sstream>
+
+#if defined(ESP8266) || defined(ESP32)
+    #include <WiFiServer.h>
+    #include <WiFiClient.h>
+    #define ARDUINO_TCP_SERVER WiFiServer
+    #define ARDUINO_TCP_CLIENT WiFiClient
+#elif defined(ARDUINO_ARCH_AVR) || defined(ARDUINO_ARCH_SAMD) || defined(ARDUINO_ARCH_NRF52)
+    #include <Ethernet.h>
+    #include <EthernetServer.h>
+    #include <EthernetClient.h>
+    #define ARDUINO_TCP_SERVER EthernetServer
+    #define ARDUINO_TCP_CLIENT EthernetClient
+#else
+    #include <WiFiServer.h>
+    #include <WiFiClient.h>
+    #define ARDUINO_TCP_SERVER WiFiServer
+    #define ARDUINO_TCP_CLIENT WiFiClient
+#endif
+
+#include <Arduino.h>
 #include <vector>
 
 /**
  * HTTP TCP Server implementation of IServer interface
- * Header-only implementation using standard TCP sockets
+ * Header-only implementation using Arduino PlatformIO TCP server
  */
 ServerImpl("http tcp arduino server")
 class HttpTcpArduinoServer : public IServer {
     Private UInt port_;
-    Private Int serverSocket_;
+    Private ARDUINO_TCP_SERVER* server_;
     Private Bool running_;
     Private StdString ipAddress_;
     Private StdString lastClientIp_;
@@ -27,48 +41,176 @@ class HttpTcpArduinoServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
+    Private ARDUINO_TCP_CLIENT* currentClient_;
 
-    Private Void CloseSocket(Int& socket) {
-        if (socket >= 0) {
-            close(socket);
-            socket = -1;
+    Private Void CloseClient() {
+        if (currentClient_ != nullptr) {
+            currentClient_->stop();
+            delete currentClient_;
+            currentClient_ = nullptr;
         }
     }
 
-    Private Void SendHttpResponse(Int clientSocket, CStdString& request) {
+    Private Void SendHttpResponse(ARDUINO_TCP_CLIENT& client, CStdString& request) {
         // Parse the request to extract method and path
-        std::istringstream requestStream(request);
         StdString method, path, version;
-        requestStream >> method >> path >> version;
+        Size firstSpace = request.find(' ');
+        if (firstSpace != StdString::npos) {
+            method = request.substr(0, firstSpace);
+            Size secondSpace = request.find(' ', firstSpace + 1);
+            if (secondSpace != StdString::npos) {
+                path = request.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+                Size versionStart = request.find("\r\n", secondSpace);
+                if (versionStart != StdString::npos) {
+                    version = request.substr(secondSpace + 1, versionStart - secondSpace - 1);
+                }
+            }
+        }
         
         // Build HTTP response
-        std::ostringstream response;
-        response << "HTTP/1.1 200 OK\r\n";
-        response << "Content-Type: text/plain\r\n";
-        response << "Connection: close\r\n";
-        response << "\r\n";
-        response << "Request received successfully!\n";
-        response << "Method: " << method << "\n";
-        response << "Path: " << path << "\n";
-        response << "Full Request:\n" << request;
+        StdString response = "HTTP/1.1 200 OK\r\n";
+        response += "Content-Type: text/plain\r\n";
+        response += "Connection: close\r\n";
+        response += "\r\n";
+        response += "Request received successfully!\n";
+        response += "Method: " + method + "\n";
+        response += "Path: " + path + "\n";
+        response += "Full Request:\n" + request;
         
-        StdString responseStr = response.str();
-        send(clientSocket, responseStr.c_str(), responseStr.length(), 0);
+        client.print(response.c_str());
         sentMessageCount_++;
     }
 
+    Private StdString ReadHttpRequest(ARDUINO_TCP_CLIENT& client) {
+        StdString request;
+        Size bufferSize = maxMessageSize_ > 0 ? maxMessageSize_ : 8192; // Default 8KB for Arduino
+        if (bufferSize > 8192) bufferSize = 8192; // Limit to 8KB for Arduino memory constraints
+        
+        std::vector<Char> buffer(bufferSize, 0);
+        Size totalReceived = 0;
+        ULong startTime = millis();
+        ULong timeoutMs = receiveTimeout_ > 0 ? receiveTimeout_ : 5000; // Default 5 second timeout
+        
+        // Read until we get the headers (double CRLF)
+        while (client.connected() || client.available()) {
+            // Check timeout
+            if (receiveTimeout_ > 0 && (millis() - startTime) > timeoutMs) {
+                break;
+            }
+            
+            if (client.available()) {
+                Size remainingSpace = bufferSize - totalReceived - 1;
+                if (remainingSpace == 0) {
+                    break; // Buffer full
+                }
+                
+                Int bytesAvailable = client.available();
+                if (bytesAvailable > 0) {
+                    Int bytesToRead = (bytesAvailable < static_cast<Int>(remainingSpace)) ? 
+                                     bytesAvailable : static_cast<Int>(remainingSpace);
+                    
+                    Int bytesRead = client.readBytes(buffer.data() + totalReceived, bytesToRead);
+                    if (bytesRead > 0) {
+                        totalReceived += bytesRead;
+                        buffer[totalReceived] = '\0';
+                        
+                        // Check if we've received the headers (look for double CRLF)
+                        StdString currentData(buffer.data(), totalReceived);
+                        Size headerEnd = currentData.find("\r\n\r\n");
+                        if (headerEnd == StdString::npos) {
+                            headerEnd = currentData.find("\n\n");
+                        }
+                        
+                        if (headerEnd != StdString::npos) {
+                            // Headers received, check for Content-Length
+                            Size contentLengthPos = currentData.find("Content-Length:");
+                            if (contentLengthPos != StdString::npos) {
+                                // Extract Content-Length value
+                                Size valueStart = currentData.find(':', contentLengthPos) + 1;
+                                Size valueEnd = currentData.find("\r\n", valueStart);
+                                if (valueEnd == StdString::npos) {
+                                    valueEnd = currentData.find('\n', valueStart);
+                                }
+                                
+                                StdString contentLengthStr = currentData.substr(valueStart, valueEnd - valueStart);
+                                // Trim whitespace
+                                while (!contentLengthStr.empty() && 
+                                       (contentLengthStr[0] == ' ' || contentLengthStr[0] == '\t')) {
+                                    contentLengthStr.erase(0, 1);
+                                }
+                                while (!contentLengthStr.empty() && 
+                                       (contentLengthStr[contentLengthStr.length() - 1] == ' ' || 
+                                        contentLengthStr[contentLengthStr.length() - 1] == '\t')) {
+                                    contentLengthStr.erase(contentLengthStr.length() - 1);
+                                }
+                                
+                                ULong contentLength = 0;
+                                for (Size i = 0; i < contentLengthStr.length(); i++) {
+                                    if (contentLengthStr[i] >= '0' && contentLengthStr[i] <= '9') {
+                                        contentLength = contentLength * 10 + (contentLengthStr[i] - '0');
+                                    }
+                                }
+                                
+                                Size bodyStart = headerEnd + 4; // Skip double CRLF
+                                Size bodyReceived = totalReceived - bodyStart;
+                                
+                                // Read remaining body if needed
+                                while (bodyReceived < contentLength && 
+                                       totalReceived < bufferSize - 1 &&
+                                       (client.connected() || client.available())) {
+                                    if (receiveTimeout_ > 0 && (millis() - startTime) > timeoutMs) {
+                                        break;
+                                    }
+                                    
+                                    if (client.available()) {
+                                        Size remaining = bufferSize - totalReceived - 1;
+                                        if (remaining > 0) {
+                                            Int moreBytes = client.readBytes(
+                                                buffer.data() + totalReceived, 
+                                                (remaining < 1024) ? remaining : 1024
+                                            );
+                                            if (moreBytes > 0) {
+                                                totalReceived += moreBytes;
+                                                bodyReceived = totalReceived - bodyStart;
+                                            } else {
+                                                break;
+                                            }
+                                        } else {
+                                            break;
+                                        }
+                                    } else {
+                                        delay(10); // Small delay to wait for more data
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                } else {
+                    delay(10); // Small delay to wait for data
+                }
+            } else {
+                delay(10); // Small delay when no data available
+            }
+        }
+        
+        return StdString(buffer.data(), totalReceived);
+    }
+
     Public HttpTcpArduinoServer() 
-        : port_(DEFAULT_SERVER_PORT), serverSocket_(-1), running_(false),
+        : port_(DEFAULT_SERVER_PORT), server_(nullptr), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(88192), receiveTimeout_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000), currentClient_(nullptr) {
     }
 
     Public HttpTcpArduinoServer(CUInt port) 
-        : port_(port), serverSocket_(-1), running_(false),
+        : port_(port), server_(nullptr), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(88192), receiveTimeout_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000), currentClient_(nullptr) {
     }
 
     Public Virtual ~HttpTcpArduinoServer() {
@@ -82,45 +224,17 @@ class HttpTcpArduinoServer : public IServer {
 
         port_ = port;
         
-        // Create socket
-        serverSocket_ = socket(AF_INET, SOCK_STREAM, 0);
-        if (serverSocket_ < 0) {
+        // Create and start the server
+        if (server_ != nullptr) {
+            delete server_;
+        }
+        
+        server_ = new ARDUINO_TCP_SERVER(static_cast<uint16_t>(port_));
+        if (server_ == nullptr) {
             return false;
         }
         
-        // Set socket option to reuse address
-        Int opt = 1;
-        if (setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-            CloseSocket(serverSocket_);
-            return false;
-        }
-        
-        // Bind socket to address
-        sockaddr_in serverAddress{};
-        serverAddress.sin_family = AF_INET;
-        
-        // Set IP address
-        if (ipAddress_ == "0.0.0.0") {
-            serverAddress.sin_addr.s_addr = INADDR_ANY;
-        } else {
-            if (inet_aton(ipAddress_.c_str(), &serverAddress.sin_addr) == 0) {
-                CloseSocket(serverSocket_);
-                return false;
-            }
-        }
-        
-        serverAddress.sin_port = htons(static_cast<uint16_t>(port_));
-        
-        if (bind(serverSocket_, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
-            CloseSocket(serverSocket_);
-            return false;
-        }
-        
-        // Listen for connections
-        if (listen(serverSocket_, 5) < 0) {
-            CloseSocket(serverSocket_);
-            return false;
-        }
+        server_->begin();
         
         running_ = true;
         return true;
@@ -128,7 +242,12 @@ class HttpTcpArduinoServer : public IServer {
 
     Public Virtual Void Stop() override {
         if (running_) {
-            CloseSocket(serverSocket_);
+            CloseClient();
+            if (server_ != nullptr) {
+                // Arduino servers don't have explicit stop, but we can delete it
+                delete server_;
+                server_ = nullptr;
+            }
             running_ = false;
         }
     }
@@ -154,118 +273,44 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        if (!running_ || serverSocket_ < 0) {
+        if (!running_ || server_ == nullptr) {
             return nullptr;
         }
         
-        // Accept a client connection
-        sockaddr_in clientAddress{};
-        socklen_t clientAddressLength = sizeof(clientAddress);
+        // Close previous client if still open
+        CloseClient();
         
-        Int clientSocket = accept(serverSocket_, (struct sockaddr*)&clientAddress, &clientAddressLength);
-        if (clientSocket < 0) {
+        // Check for new client connection
+        ARDUINO_TCP_CLIENT client = server_->available();
+        if (!client || !client.connected()) {
             return nullptr;
         }
         
         // Store client information
-        Char clientIP[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &clientAddress.sin_addr, clientIP, INET_ADDRSTRLEN);
-        lastClientIp_ = StdString(clientIP);
-        lastClientPort_ = ntohs(clientAddress.sin_port);
+        #if defined(ESP8266) || defined(ESP32)
+            IPAddress clientIP = client.remoteIP();
+            lastClientIp_ = StdString(clientIP.toString().c_str());
+            lastClientPort_ = client.remotePort();
+        #else
+            // For Ethernet, we may not have direct access to client IP
+            // Use a placeholder or try to get it if available
+            lastClientIp_ = "0.0.0.0";
+            lastClientPort_ = 0;
+        #endif
         
-        // Receive HTTP request - read headers first
-        // Use dynamic buffer based on maxMessageSize_ (default allows up to 100MB)
-        Size bufferSize = maxMessageSize_ > 0 ? maxMessageSize_ : 104857600; // 100MB default max
-        std::vector<Char> buffer(bufferSize, 0);
-        Size totalReceived = 0;
+        // Read HTTP request
+        StdString requestString = ReadHttpRequest(client);
         
-        // Read until we get the headers (double CRLF)
-        while (true) {
-            Size remainingSpace = bufferSize - totalReceived - 1;
-            if (remainingSpace == 0) {
-                break; // Buffer full
-            }
-            
-            ssize_t bytesReceived = recv(clientSocket, buffer.data() + totalReceived, 
-                                        remainingSpace, 0);
-            if (bytesReceived <= 0) {
-                if (totalReceived == 0) {
-                    CloseSocket(clientSocket);
-                    return nullptr;
-                }
-                break;
-            }
-            
-            totalReceived += bytesReceived;
-            buffer[totalReceived] = '\0';
-            
-            // Check if we've received the headers (look for double CRLF)
-            StdString currentData(buffer.data(), totalReceived);
-            Size headerEnd = currentData.find("\r\n\r\n");
-            if (headerEnd == StdString::npos) {
-                headerEnd = currentData.find("\n\n");
-            }
-            
-            if (headerEnd != StdString::npos) {
-                // Headers received, check for Content-Length
-                Size contentLengthPos = currentData.find("Content-Length:");
-                if (contentLengthPos != StdString::npos) {
-                    // Extract Content-Length value
-                    Size valueStart = currentData.find(':', contentLengthPos) + 1;
-                    Size valueEnd = currentData.find("\r\n", valueStart);
-                    if (valueEnd == StdString::npos) {
-                        valueEnd = currentData.find('\n', valueStart);
-                    }
-                    
-                    StdString contentLengthStr = currentData.substr(valueStart, valueEnd - valueStart);
-                    // Trim whitespace
-                    contentLengthStr.erase(0, contentLengthStr.find_first_not_of(" \t"));
-                    contentLengthStr.erase(contentLengthStr.find_last_not_of(" \t") + 1);
-                    
-                    ULong contentLength = std::stoull(contentLengthStr);
-                    Size bodyStart = headerEnd + 4; // Skip double CRLF
-                    Size bodyReceived = totalReceived - bodyStart;
-                    
-                    // Ensure we have enough buffer space for the full body
-                    Size requiredSize = bodyStart + contentLength;
-                    if (requiredSize > bufferSize) {
-                        // Buffer too small, resize if possible (up to maxMessageSize_)
-                        if (requiredSize <= maxMessageSize_ || maxMessageSize_ == 0) {
-                            bufferSize = requiredSize;
-                            buffer.resize(bufferSize);
-                        } else {
-                            // Content-Length exceeds maxMessageSize_, truncate
-                            contentLength = maxMessageSize_ - bodyStart;
-                        }
-                    }
-                    
-                    // Read remaining body if needed
-                    while (bodyReceived < contentLength && 
-                           totalReceived < bufferSize - 1) {
-                        Size remaining = bufferSize - totalReceived - 1;
-                        ssize_t moreBytes = recv(clientSocket, buffer.data() + totalReceived, 
-                                                remaining, 0);
-                        if (moreBytes <= 0) break;
-                        totalReceived += moreBytes;
-                        bodyReceived = totalReceived - bodyStart;
-                    }
-                }
-                break;
-            }
-            
-            // Prevent buffer overflow
-            if (totalReceived >= bufferSize - 1) {
-                break;
-            }
+        if (requestString.empty()) {
+            client.stop();
+            return nullptr;
         }
         
-        StdString requestString(buffer.data(), totalReceived);
-        
         // Send HTTP response
-        SendHttpResponse(clientSocket, requestString);
+        SendHttpResponse(client, requestString);
         
-        // Close client socket
-        CloseSocket(clientSocket);
+        // Close client connection
+        client.stop();
         
         receivedMessageCount_++;
         
@@ -278,34 +323,29 @@ class HttpTcpArduinoServer : public IServer {
                             CUInt clientPort = 0) override {
         // For TCP, we typically send responses during ReceiveMessage
         // This method can be used for sending to a specific client if needed
-        // For now, we'll implement a basic version that sends to the last client
-        if (!running_ || serverSocket_ < 0) {
+        if (!running_ || server_ == nullptr) {
             return false;
         }
         
-        // Accept a connection if we have client info
+        // For Arduino TCP, sending to a specific client requires establishing a connection
+        // This is a simplified implementation that attempts to connect to the client
         if (!clientIp.empty() && clientPort > 0) {
-            // For TCP, we need an active connection to send
-            // This is a simplified implementation
-            sockaddr_in clientAddress{};
-            clientAddress.sin_family = AF_INET;
-            inet_aton(clientIp.c_str(), &clientAddress.sin_addr);
-            clientAddress.sin_port = htons(static_cast<uint16_t>(clientPort));
-            
-            Int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
-            if (clientSocket < 0) {
+            #if defined(ESP8266) || defined(ESP32)
+                WiFiClient client;
+                IPAddress ip;
+                if (ip.fromString(clientIp.c_str())) {
+                    if (client.connect(ip, static_cast<uint16_t>(clientPort))) {
+                        client.print(message.c_str());
+                        client.stop();
+                        sentMessageCount_++;
+                        return true;
+                    }
+                }
+            #else
+                // For Ethernet, we'd need to use EthernetClient similarly
+                // This is platform-specific and may not be fully supported
                 return false;
-            }
-            
-            if (connect(clientSocket, (struct sockaddr*)&clientAddress, sizeof(clientAddress)) < 0) {
-                CloseSocket(clientSocket);
-                return false;
-            }
-            
-            send(clientSocket, message.c_str(), message.length(), 0);
-            CloseSocket(clientSocket);
-            sentMessageCount_++;
-            return true;
+            #endif
         }
         
         return false;
@@ -340,7 +380,12 @@ class HttpTcpArduinoServer : public IServer {
         if (running_) {
             return false;
         }
-        maxMessageSize_ = static_cast<UInt>(size);
+        // Limit max message size for Arduino memory constraints
+        if (size > 8192) {
+            maxMessageSize_ = 8192;
+        } else {
+            maxMessageSize_ = static_cast<UInt>(size);
+        }
         return true;
     }
 
@@ -350,14 +395,6 @@ class HttpTcpArduinoServer : public IServer {
 
     Public Virtual Bool SetReceiveTimeout(CUInt timeoutMs) override {
         receiveTimeout_ = timeoutMs;
-        if (serverSocket_ >= 0) {
-            struct timeval tv;
-            tv.tv_sec = timeoutMs / 1000;
-            tv.tv_usec = (timeoutMs % 1000) * 1000;
-            if (setsockopt(serverSocket_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-                return false;
-            }
-        }
         return true;
     }
 
@@ -367,4 +404,3 @@ class HttpTcpArduinoServer : public IServer {
 };
 
 #endif // HttpTcpArduinoServer_H
-
