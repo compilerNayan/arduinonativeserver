@@ -6,24 +6,6 @@
 #include <WiFiServer.h>
 #include <WiFiClient.h>
 #include <Arduino.h>
-#include <sstream>
-#ifdef ARDUINO
-#include <stdlib.h>
-#else
-#include <random>
-#endif
-
-/**
- * Structure to hold sender details for response routing (Arduino version)
- */
-struct ArduinoSenderDetails {
-    StdString clientIp;
-    UInt clientPort;
-    
-    ArduinoSenderDetails() : clientPort(0) {}
-    ArduinoSenderDetails(CStdString& ip, CUInt port) 
-        : clientIp(ip), clientPort(port) {}
-};
 
 /**
  * HTTP TCP Server implementation of IServer interface
@@ -41,7 +23,6 @@ class HttpTcpArduinoServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
-    Private std::unordered_map<StdString, ArduinoSenderDetails> senderDetailsMap_;
 
     Private StdString ReadHttpRequestHeaders(WiFiClient& client) {
         StdString requestHeaders = "";
@@ -75,65 +56,6 @@ class HttpTcpArduinoServer : public IServer {
         return requestHeaders;
     }
 
-    Private StdString GenerateGuid() {
-        // GUID generation for Arduino and desktop
-        std::ostringstream oss;
-        oss << std::hex;
-        
-#ifdef ARDUINO
-        // Arduino version using random()
-        randomSeed(analogRead(0) + millis());
-        for (Size i = 0; i < 8; i++) {
-            oss << (random() % 16);
-        }
-        oss << "-";
-        for (Size i = 0; i < 4; i++) {
-            oss << (random() % 16);
-        }
-        oss << "-4"; // Version 4
-        for (Size i = 0; i < 3; i++) {
-            oss << (random() % 16);
-        }
-        oss << "-";
-        oss << (8 + (random() % 4)); // Variant (8-11)
-        for (Size i = 0; i < 3; i++) {
-            oss << (random() % 16);
-        }
-        oss << "-";
-        for (Size i = 0; i < 12; i++) {
-            oss << (random() % 16);
-        }
-#else
-        // Desktop version using std::random
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 15);
-        std::uniform_int_distribution<> dis2(8, 11);
-        
-        for (Size i = 0; i < 8; i++) {
-            oss << dis(gen);
-        }
-        oss << "-";
-        for (Size i = 0; i < 4; i++) {
-            oss << dis(gen);
-        }
-        oss << "-4"; // Version 4
-        for (Size i = 0; i < 3; i++) {
-            oss << dis(gen);
-        }
-        oss << "-";
-        oss << dis2(gen); // Variant
-        for (Size i = 0; i < 3; i++) {
-            oss << dis(gen);
-        }
-        oss << "-";
-        for (Size i = 0; i < 12; i++) {
-            oss << dis(gen);
-        }
-#endif
-        return oss.str();
-    }
-    
     Private Int ParseContentLength(CStdString& headers) {
         Size contentLengthIndex = headers.find("Content-Length:");
         if (contentLengthIndex == StdString::npos) {
@@ -302,48 +224,26 @@ class HttpTcpArduinoServer : public IServer {
         // Build full request string (headers + body)
         StdString fullRequest = requestHeaders + body;
         
-        // Generate GUID for this request
-        StdString requestId = GenerateGuid();
-        
-        // Store sender details in map for response routing
-        ArduinoSenderDetails senderDetails(lastClientIp_, lastClientPort_);
-        senderDetailsMap_[requestId] = senderDetails;
-        
         // Close client connection (CRITICAL: must close to free socket)
         client.stop();
         
         receivedMessageCount_++;
         
-        // Parse and return IHttpRequest with request ID
-        return IHttpRequest::GetRequest(fullRequest, requestId);
+        // Parse and return IHttpRequest
+        return IHttpRequest::GetRequest(fullRequest);
     }
 
-    Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
-        if (!running_ || server_ == nullptr) {
+    Public Virtual Bool SendMessage(CStdString& message, 
+                            CStdString& clientIp = "", 
+                            CUInt clientPort = 0) override {
+        // For TCP HTTP server, responses are typically sent during ReceiveMessage
+        // This method returns dummy value as requested
+        if (!running_) {
             return false;
         }
         
-        // Look up sender details from the map using request ID
-        auto it = senderDetailsMap_.find(StdString(requestId));
-        if (it == senderDetailsMap_.end()) {
-            return false; // Request ID not found
-        }
-        
-        ArduinoSenderDetails& senderDetails = it->second;
-        
-        // For Arduino, we need to create a new connection to send the message
-        // since the original connection is closed after ReceiveMessage
-        WiFiClient client;
-        if (!client.connect(senderDetails.clientIp.c_str(), senderDetails.clientPort)) {
-            return false; // Failed to connect
-        }
-        
-        // Send the message
-        client.print(message.c_str());
-        client.stop();
-        
-        sentMessageCount_++;
-        return true;
+        // Dummy implementation - return false
+        return false;
     }
 
     Public Virtual StdString GetLastClientIp() const override {
@@ -394,33 +294,6 @@ class HttpTcpArduinoServer : public IServer {
 
     Public Virtual ServerType GetServerType() const override {
         return ServerType::TCP;
-    }
-    
-    /**
-     * Get sender details for a given request ID
-     * @param requestId The request ID (GUID) to look up
-     * @return ArduinoSenderDetails* if found, or nullptr if not found
-     */
-    Public ArduinoSenderDetails* GetSenderDetails(CStdString& requestId) {
-        auto it = senderDetailsMap_.find(StdString(requestId));
-        if (it != senderDetailsMap_.end()) {
-            return &it->second;
-        }
-        return nullptr;
-    }
-    
-    /**
-     * Remove sender details for a given request ID (cleanup after response sent)
-     * @param requestId The request ID (GUID) to remove
-     * @return true if found and removed, false otherwise
-     */
-    Public Bool RemoveSenderDetails(CStdString& requestId) {
-        auto it = senderDetailsMap_.find(StdString(requestId));
-        if (it != senderDetailsMap_.end()) {
-            senderDetailsMap_.erase(it);
-            return true;
-        }
-        return false;
     }
 };
 
