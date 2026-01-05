@@ -277,16 +277,16 @@ class HttpTcpArduinoServer : public IServer {
         return IHttpRequest::GetRequest(fullRequest, requestId);
     }
 
-    Public Virtual Bool SendMessage(CStdString& message, 
-                            CStdString& clientIp = "", 
-                            CUInt clientPort = 0) override {
-        // For TCP HTTP server, responses are typically sent during ReceiveMessage
-        // This method returns dummy value as requested
+    Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
+        // For Arduino TCP HTTP server, this is a placeholder implementation
+        // The requestId-based sending would require maintaining a connection map
+        // which is more complex on Arduino due to WiFiClient lifecycle
         if (!running_) {
             return false;
         }
         
-        // Dummy implementation - return false
+        // Placeholder implementation - return false
+        // TODO: Implement requestId-based message sending for Arduino if needed
         return false;
     }
 
