@@ -24,6 +24,47 @@ class HttpTcpArduinoServer : public IServer {
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
 
+    Private StdString GenerateGuid() {
+        // Simple GUID generation for Arduino using random()
+        // Generate UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        StdString guid = "";
+        Char hexChars[] = "0123456789abcdef";
+        
+        // First 8 hex digits
+        for (Size i = 0; i < 8; i++) {
+            guid += hexChars[random(0, 16)];
+        }
+        guid += "-";
+        
+        // Next 4 hex digits
+        for (Size i = 0; i < 4; i++) {
+            guid += hexChars[random(0, 16)];
+        }
+        guid += "-4";
+        
+        // Next 3 hex digits (version 4)
+        for (Size i = 0; i < 3; i++) {
+            guid += hexChars[random(0, 16)];
+        }
+        guid += "-";
+        
+        // Variant (8, 9, a, or b)
+        guid += hexChars[random(8, 12)];
+        
+        // Next 3 hex digits
+        for (Size i = 0; i < 3; i++) {
+            guid += hexChars[random(0, 16)];
+        }
+        guid += "-";
+        
+        // Last 12 hex digits
+        for (Size i = 0; i < 12; i++) {
+            guid += hexChars[random(0, 16)];
+        }
+        
+        return guid;
+    }
+
     Private StdString ReadHttpRequestHeaders(WiFiClient& client) {
         StdString requestHeaders = "";
         ULong timeout = millis();
@@ -229,8 +270,11 @@ class HttpTcpArduinoServer : public IServer {
         
         receivedMessageCount_++;
         
-        // Parse and return IHttpRequest
-        return IHttpRequest::GetRequest(fullRequest);
+        // Generate GUID for this request
+        StdString requestId = GenerateGuid();
+        
+        // Parse and return IHttpRequest with request ID
+        return IHttpRequest::GetRequest(fullRequest, requestId);
     }
 
     Public Virtual Bool SendMessage(CStdString& message, 
