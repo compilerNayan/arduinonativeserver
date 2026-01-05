@@ -274,7 +274,7 @@ class HttpTcpArduinoServer : public IServer {
         StdString requestId = GenerateGuid();
         
         // Parse and return IHttpRequest with request ID
-        return IHttpRequest::GetRequest(fullRequest, requestId);
+        return IHttpRequest::GetRequest(requestId, fullRequest);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
