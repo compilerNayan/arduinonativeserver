@@ -6,6 +6,19 @@
 #include <WiFiServer.h>
 #include <WiFiClient.h>
 #include <Arduino.h>
+#include <map>
+
+/**
+ * Sender details structure to store client connection information
+ */
+struct SenderDetails {
+    WiFiClient* client;
+    StdString ipAddress;
+    UInt port;
+    
+    SenderDetails() : client(nullptr), ipAddress(""), port(0) {}
+    SenderDetails(WiFiClient* cli, CStdString& ip, CUInt p) : client(cli), ipAddress(ip), port(p) {}
+};
 
 /**
  * HTTP TCP Server implementation of IServer interface
@@ -23,6 +36,7 @@ class HttpTcpArduinoServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
+    Private std_map<StdString, SenderDetails> requestSenderMap_;
 
     Private StdString GenerateGuid() {
         // Simple GUID generation for Arduino using random()
@@ -265,29 +279,72 @@ class HttpTcpArduinoServer : public IServer {
         // Build full request string (headers + body)
         StdString fullRequest = requestHeaders + body;
         
-        // Close client connection (CRITICAL: must close to free socket)
-        client.stop();
-        
-        receivedMessageCount_++;
-        
         // Generate GUID for this request
         StdString requestId = GenerateGuid();
         
+        // Allocate WiFiClient on heap to keep it alive
+        // Use move semantics if available, otherwise copy
+        WiFiClient* clientPtr = new WiFiClient(std::move(client));
+        if (clientPtr == nullptr) {
+            client.stop();
+            return nullptr;
+        }
+        
+        // Store sender details against the GUID
+        SenderDetails senderDetails(clientPtr, lastClientIp_, lastClientPort_);
+        requestSenderMap_[requestId] = senderDetails;
+        
+        receivedMessageCount_++;
+        
         // Parse and return IHttpRequest with request ID
+        // NOTE: Do NOT close client here - it's stored in the map for SendMessage()
         return IHttpRequest::GetRequest(requestId, fullRequest);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
-        // For Arduino TCP HTTP server, this is a placeholder implementation
-        // The requestId-based sending would require maintaining a connection map
-        // which is more complex on Arduino due to WiFiClient lifecycle
-        if (!running_) {
+        if (!running_ || server_ == nullptr) {
             return false;
         }
         
-        // Placeholder implementation - return false
-        // TODO: Implement requestId-based message sending for Arduino if needed
-        return false;
+        // Look up sender details from the map using requestId
+        auto it = requestSenderMap_.find(StdString(requestId));
+        if (it == requestSenderMap_.end()) {
+            return false; // Request ID not found
+        }
+        
+        SenderDetails& senderDetails = it->second;
+        
+        // Check if client is valid
+        if (senderDetails.client == nullptr || !senderDetails.client->connected()) {
+            // Clean up if client is invalid
+            if (senderDetails.client != nullptr) {
+                senderDetails.client->stop();
+                delete senderDetails.client;
+            }
+            requestSenderMap_.erase(it);
+            return false;
+        }
+        
+        // Send the message using the stored client
+        WiFiClient* client = senderDetails.client;
+        size_t bytesSent = client->print(message.c_str());
+        if (bytesSent == 0) {
+            // Failed to send, clean up
+            client->stop();
+            delete client;
+            requestSenderMap_.erase(it);
+            return false;
+        }
+        
+        // Close the client after sending
+        client->stop();
+        delete client;
+        
+        // Remove the entry from the map after sending
+        requestSenderMap_.erase(it);
+        
+        sentMessageCount_++;
+        return true;
     }
 
     Public Virtual StdString GetLastClientIp() const override {
