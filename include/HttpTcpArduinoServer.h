@@ -36,7 +36,7 @@ class HttpTcpArduinoServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
-    Private std_map<StdString, SenderDetails> requestSenderMap_;
+    Private Map<StdString, SenderDetails> requestSenderMap_;
 
     Private StdString GenerateGuid() {
         // Simple GUID generation for Arduino using random()
