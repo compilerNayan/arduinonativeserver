@@ -191,29 +191,62 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
+        Serial.print("[HttpTcpArduinoServer] Start() called with port: ");
+        Serial.println(port);
+        
         if (running_) {
+            Serial.println("[HttpTcpArduinoServer] ERROR: Server is already running!");
             return false;
         }
 
         port_ = port;
+        Serial.print("[HttpTcpArduinoServer] Port set to: ");
+        Serial.println(port_);
         
+        Serial.println("[HttpTcpArduinoServer] Step 1: Cleaning up existing server instance...");
         if (server_ != nullptr) {
             delete server_;
+            server_ = nullptr;
+            Serial.println("[HttpTcpArduinoServer] Old server instance deleted");
         }
         
+        Serial.println("[HttpTcpArduinoServer] Step 2: Creating new WiFiServer instance...");
         server_ = new WiFiServer(static_cast<uint16_t>(port_));
         if (server_ == nullptr) {
+            Serial.println("[HttpTcpArduinoServer] ERROR: Failed to allocate memory for WiFiServer!");
             return false;
         }
+        Serial.println("[HttpTcpArduinoServer] WiFiServer instance created successfully");
         
+        Serial.println("[HttpTcpArduinoServer] Step 3: Checking WiFi status...");
+        wl_status_t wifiStatus = WiFi.status();
+        Serial.print("[HttpTcpArduinoServer] WiFi status: ");
+        Serial.println(wifiStatus);
+        if (wifiStatus != WL_CONNECTED) {
+            Serial.print("[HttpTcpArduinoServer] WARNING: WiFi is not connected (status: ");
+            Serial.print(wifiStatus);
+            Serial.println("). Server may not work properly.");
+        } else {
+            Serial.print("[HttpTcpArduinoServer] WiFi is connected. Local IP: ");
+            Serial.println(WiFi.localIP());
+        }
+        
+        Serial.println("[HttpTcpArduinoServer] Step 4: Starting server with server_->begin()...");
         server_->begin();
         running_ = true;
+        Serial.print("[HttpTcpArduinoServer] Server started. Running: ");
+        Serial.println(running_ ? "true" : "false");
         
         // Get actual IP address if WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
             ipAddress_ = StdString(WiFi.localIP().toString().c_str());
+            Serial.print("[HttpTcpArduinoServer] Server IP address: ");
+            Serial.println(ipAddress_.c_str());
+        } else {
+            Serial.println("[HttpTcpArduinoServer] WiFi not connected, IP address not set");
         }
         
+        Serial.println("[HttpTcpArduinoServer] Start() completed successfully");
         return true;
     }
 
