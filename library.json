@@ -13,7 +13,7 @@
     "url": "https://github.com/compilerNayan/arduinonativeserver.git"
   },
   "dependencies": {
-    "serverlib": "https://github.com/compilerNayan/arduionolibserver.git"
+    "serverlib": "https://github.com/compilerNayan/arduinolibserver.git"
   },
   "license": "MIT",
   "homepage": "",
