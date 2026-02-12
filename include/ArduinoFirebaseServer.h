@@ -56,9 +56,21 @@ class ArduinoFirebaseServer : public IServer {
         if (path.length() == 0) path = "/";
         String url = "https://" + String(ARDUINO_FIREBASE_HOST) + path + ".json?orderBy=%22%24key%22&limitToLast=1&auth=" + String(ARDUINO_FIREBASE_AUTH);
 
+        const int maxRetries = 3;
+        const int retryDelayMs = 200;
         HTTPClient http;
-        http.begin(url);
-        int code = http.GET();
+        int code = -1;
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            http.begin(url);
+            code = http.GET();
+            if (code == 200) {
+                break;
+            }
+            http.end();
+            if (attempt < maxRetries - 1) {
+                delay(retryDelayMs);
+            }
+        }
         Bool ok = (code == 200);
         if (ok) {
             String payload = http.getString();
@@ -96,7 +108,7 @@ class ArduinoFirebaseServer : public IServer {
             }
         } else {
             http.end();
-            Serial.printf("[ArduinoFirebaseServer] HTTP %d\n", code);
+            Serial.printf("[ArduinoFirebaseServer] HTTP %d (after %d attempt(s))\n", code, maxRetries);
         }
         return ok;
     }
