@@ -4,10 +4,21 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
+#include <Firebase_ESP_Client.h>
+
+// Firebase / WiFi credentials (from exp1)
+#define ARDUINO_FIREBASE_WIFI_SSID "Garfield"
+#define ARDUINO_FIREBASE_WIFI_PASS "123Madhu$$"
+#define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define ARDUINO_FIREBASE_AUTH "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"
+#define ARDUINO_FIREBASE_PATH ""
 
 /**
  * Firebase-style server implementation of IServer interface.
- * Stub implementation that returns dummy strings/values for now.
+ * Fetches latest key-value from Firebase (consume-on-read), parses value as HTTP request.
  */
 /* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
@@ -20,6 +31,77 @@ class ArduinoFirebaseServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
+    Private FirebaseData fbdo_;
+    Private FirebaseAuth auth_;
+    Private FirebaseConfig config_;
+
+    Private StdString GenerateGuid() {
+        StdString guid = "";
+        Char hexChars[] = "0123456789abcdef";
+        for (Size i = 0; i < 8; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        for (Size i = 0; i < 4; i++) guid += hexChars[random(0, 16)];
+        guid += "-4";
+        for (Size i = 0; i < 3; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        guid += hexChars[random(8, 12)];
+        for (Size i = 0; i < 3; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        for (Size i = 0; i < 12; i++) guid += hexChars[random(0, 16)];
+        return guid;
+    }
+
+    /** Fetches the latest child via REST, then deletes it from Firebase (consume-on-read). */
+    Private Bool GetLatestFromFirebase(StdString& outKey, StdString& outValue) {
+        String path = String(ARDUINO_FIREBASE_PATH);
+        if (path.length() && !path.startsWith("/")) path = "/" + path;
+        if (path.length() == 0) path = "/";
+        String url = "https://" + String(ARDUINO_FIREBASE_HOST) + path + ".json?orderBy=%22%24key%22&limitToLast=1&auth=" + String(ARDUINO_FIREBASE_AUTH);
+
+        HTTPClient http;
+        http.begin(url);
+        int code = http.GET();
+        Bool ok = (code == 200);
+        if (ok) {
+            String payload = http.getString();
+            http.end();
+
+            DynamicJsonDocument doc(1024);
+            if (deserializeJson(doc, payload) != DeserializationError::Ok || !doc.is<JsonObject>()) {
+                outKey = "";
+                outValue = StdString(payload.c_str());
+                return true;
+            }
+            JsonObject obj = doc.as<JsonObject>();
+            if (obj.size() == 0) {
+                outKey = "";
+                outValue = "";
+                return true;
+            }
+            JsonPair p = *obj.begin();
+            outKey = StdString(p.key().c_str());
+            if (p.value().is<String>())
+                outValue = StdString(p.value().as<String>().c_str());
+            else {
+                String valStr;
+                serializeJson(p.value(), valStr);
+                outValue = StdString(valStr.c_str());
+            }
+
+            if (outKey.length() > 0 && Firebase.ready()) {
+                String nodePath = path;
+                if (!nodePath.endsWith("/")) nodePath += "/";
+                nodePath += outKey.c_str();
+                if (!Firebase.RTDB.deleteNode(&fbdo_, nodePath.c_str())) {
+                    Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
+                }
+            }
+        } else {
+            http.end();
+            Serial.printf("[ArduinoFirebaseServer] HTTP %d\n", code);
+        }
+        return ok;
+    }
 
     Public ArduinoFirebaseServer()
         : port_(DEFAULT_SERVER_PORT), running_(false),
@@ -44,8 +126,22 @@ class ArduinoFirebaseServer : public IServer {
             return false;
         }
         port_ = port;
+        Serial.println("[ArduinoFirebaseServer] Connecting to WiFi...");
+        WiFi.begin(ARDUINO_FIREBASE_WIFI_SSID, ARDUINO_FIREBASE_WIFI_PASS);
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(500);
+            Serial.print(".");
+        }
+        Serial.println();
+        Serial.println("[ArduinoFirebaseServer] WiFi connected");
+        config_.database_url = String("https://") + ARDUINO_FIREBASE_HOST;
+        config_.signer.tokens.legacy_token = ARDUINO_FIREBASE_AUTH;
+        fbdo_.setBSSLBufferSize(4096, 1024);
+        fbdo_.setResponseSize(2048);
+        Firebase.begin(&config_, &auth_);
+        Firebase.reconnectWiFi(true);
         running_ = true;
-        ipAddress_ = "0.0.0.0";
+        ipAddress_ = WiFi.status() == WL_CONNECTED ? StdString(WiFi.localIP().toString().c_str()) : StdString("0.0.0.0");
         return true;
     }
 
@@ -74,10 +170,19 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        if (running_) {
-  //          Serial.println("[ArduinoFirebaseServer] Running - no message (dummy)");
+        if (!running_) {
+            return nullptr;
         }
-        return nullptr;
+        StdString outKey, outValue;
+        if (!GetLatestFromFirebase(outKey, outValue)) {
+            return nullptr;
+        }
+        if (outValue.empty()) {
+            return nullptr;
+        }
+        StdString requestId = GenerateGuid();
+        receivedMessageCount_++;
+        return IHttpRequest::GetRequest(requestId, outValue);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {

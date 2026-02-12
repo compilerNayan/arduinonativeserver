@@ -312,7 +312,7 @@ class HttpTcpArduinoServer : public IServer {
         // Build full request string (headers + body)
         StdString fullRequest = requestHeaders + body;
         if (!fullRequest.empty()) {
-            Serial.println(fullRequest.c_str());
+            //Serial.println(fullRequest.c_str());
         }
         
         // Generate GUID for this request
