@@ -434,6 +434,10 @@ class HttpTcpArduinoServer : public IServer {
     Public Virtual ServerType GetServerType() const override {
         return ServerType::TCP;
     }
+
+    Public Virtual StdString GetId() const override {
+        return StdString("arduinotcpserver");
+    }
 };
 
 #endif // HttpTcpArduinoServer_H

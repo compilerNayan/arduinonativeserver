@@ -246,6 +246,10 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual ServerType GetServerType() const override {
         return ServerType::Unknown;
     }
+
+    Public Virtual StdString GetId() const override {
+        return StdString("arduinofirebaseserver");
+    }
 };
 
 #endif // ArduinoFirebaseServer_H
