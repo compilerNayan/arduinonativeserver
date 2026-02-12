@@ -170,6 +170,9 @@ class ArduinoFirebaseServer : public IServer {
         if (outValue.empty()) {
             return nullptr;
         }
+        Serial.println("[ArduinoFirebaseServer] Received from Firebase:");
+        Serial.printf("  key: %s\n", outKey.c_str());
+        Serial.printf("  value: %s\n", outValue.c_str());
         StdString requestId = GenerateGuid();
         receivedMessageCount_++;
         return IHttpRequest::GetRequest(requestId, outValue);
