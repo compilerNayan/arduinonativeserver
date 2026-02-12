@@ -75,7 +75,7 @@ class ArduinoFirebaseServer : public IServer {
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (running_) {
-            Serial.println("[ArduinoFirebaseServer] Running - no message (dummy)");
+  //          Serial.println("[ArduinoFirebaseServer] Running - no message (dummy)");
         }
         return nullptr;
     }
