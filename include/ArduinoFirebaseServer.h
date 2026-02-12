@@ -185,6 +185,7 @@ class ArduinoFirebaseServer : public IServer {
         if (outValue.empty()) {
             return nullptr;
         }
+        Serial.println("[ArduinoFirebaseServer] Receive message: ");
         StdString requestId = GenerateGuid();
         receivedMessageCount_++;
         return IHttpRequest::GetRequest(requestId, outValue);

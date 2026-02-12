@@ -291,10 +291,12 @@ class HttpTcpArduinoServer : public IServer {
             return nullptr;
         }
         
-        // Store client information
+        Serial.println("[Normal TCP Server] Receive message: ");
+                // Store client information
         IPAddress clientIP = client.remoteIP();
         lastClientIp_ = StdString(clientIP.toString().c_str());
         lastClientPort_ = client.remotePort();
+        Serial.println("[Normal TCP Server] Receive message 2: ");
         
         // Read HTTP headers
         StdString requestHeaders = ReadHttpRequestHeaders(client);
