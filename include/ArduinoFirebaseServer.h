@@ -51,13 +51,16 @@ class ArduinoFirebaseServer : public IServer {
 
     /** Fetches the latest child via REST, then deletes it from Firebase (consume-on-read). */
     Private Bool GetLatestFromFirebase(StdString& outKey, StdString& outValue) {
+        if (WiFi.status() != WL_CONNECTED) {
+            return false;
+        }
         String path = String(ARDUINO_FIREBASE_PATH);
         if (path.length() && !path.startsWith("/")) path = "/" + path;
         if (path.length() == 0) path = "/";
         String url = "https://" + String(ARDUINO_FIREBASE_HOST) + path + ".json?orderBy=%22%24key%22&limitToLast=1&auth=" + String(ARDUINO_FIREBASE_AUTH);
 
-        const int maxRetries = 3;
-        const int retryDelayMs = 200;
+        const int maxRetries = 4;
+        const int retryDelayMs = 400;
         HTTPClient http;
         int code = -1;
         for (int attempt = 0; attempt < maxRetries; attempt++) {
