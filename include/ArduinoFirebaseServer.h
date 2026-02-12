@@ -9,9 +9,7 @@
 #include <ArduinoJson.h>
 #include <Firebase_ESP_Client.h>
 
-// Firebase / WiFi credentials (from exp1)
-#define ARDUINO_FIREBASE_WIFI_SSID "Garfield"
-#define ARDUINO_FIREBASE_WIFI_PASS "123Madhu$$"
+// Firebase credentials (from exp1). WiFi is assumed already connected by the application.
 #define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define ARDUINO_FIREBASE_AUTH "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"
 #define ARDUINO_FIREBASE_PATH ""
@@ -126,14 +124,6 @@ class ArduinoFirebaseServer : public IServer {
             return false;
         }
         port_ = port;
-        Serial.println("[ArduinoFirebaseServer] Connecting to WiFi...");
-        WiFi.begin(ARDUINO_FIREBASE_WIFI_SSID, ARDUINO_FIREBASE_WIFI_PASS);
-        while (WiFi.status() != WL_CONNECTED) {
-            delay(500);
-            Serial.print(".");
-        }
-        Serial.println();
-        Serial.println("[ArduinoFirebaseServer] WiFi connected");
         config_.database_url = String("https://") + ARDUINO_FIREBASE_HOST;
         config_.signer.tokens.legacy_token = ARDUINO_FIREBASE_AUTH;
         fbdo_.setBSSLBufferSize(4096, 1024);
