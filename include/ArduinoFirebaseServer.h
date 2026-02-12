@@ -28,7 +28,7 @@ class ArduinoFirebaseServer : public IServer {
           maxMessageSize_(8192), receiveTimeout_(5000) {
     }
 
-    Public     Public ArduinoFirebaseServer(CUInt port)
+    Public ArduinoFirebaseServer(CUInt port)
         : port_(port), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
@@ -74,7 +74,9 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        (void)running_;
+        if (running_) {
+            Serial.println("[ArduinoFirebaseServer] Running - no message (dummy)");
+        }
         return nullptr;
     }
 
