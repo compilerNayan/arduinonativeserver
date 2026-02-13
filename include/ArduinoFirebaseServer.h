@@ -31,6 +31,7 @@ class ArduinoFirebaseServer : public IServer {
     Private FirebaseData fbdo_;
     Private FirebaseAuth auth_;
     Private FirebaseConfig config_;
+    Private ULong lastReceiveCallMs_;
 
     Private StdString GenerateGuid() {
         StdString guid = "";
@@ -88,14 +89,14 @@ class ArduinoFirebaseServer : public IServer {
         : port_(DEFAULT_SERVER_PORT), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000) {
+          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
     }
 
     Public ArduinoFirebaseServer(CUInt port)
         : port_(port), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000) {
+          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
     }
 
     Public Virtual ~ArduinoFirebaseServer() override {
@@ -146,6 +147,10 @@ class ArduinoFirebaseServer : public IServer {
         if (!running_) {
             return nullptr;
         }
+        if ((ULong)(millis() - lastReceiveCallMs_) < 500) {
+            return nullptr;
+        }
+        lastReceiveCallMs_ = millis();
         StdString outMessage;
         if (!ReadMessageFromFirebaseAndDelete(outMessage)) {
             return nullptr;
