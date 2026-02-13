@@ -18,7 +18,7 @@
  * Firebase-style server implementation of IServer interface.
  * Fetches latest key-value from Firebase (consume-on-read), parses value as HTTP request.
  */
-// -- "arduinofirebaseserver") */
+/* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
     Private UInt port_;
     Private Bool running_;
@@ -186,7 +186,7 @@ class ArduinoFirebaseServer : public IServer {
             return nullptr;
         }
         Serial.println("[ArduinoFirebaseServer] Receive message: ");
-        StdString requestId = GenerateGuid();
+        StdString requestId = "ignore";
         receivedMessageCount_++;
         return IHttpRequest::GetRequest(requestId, outValue);
     }
@@ -245,10 +245,6 @@ class ArduinoFirebaseServer : public IServer {
 
     Public Virtual ServerType GetServerType() const override {
         return ServerType::Unknown;
-    }
-
-    Public Virtual StdString GetId() const override {
-        return StdString("arduinofirebaseserver");
     }
 };
 
