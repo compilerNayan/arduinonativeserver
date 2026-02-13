@@ -282,12 +282,14 @@ class HttpTcpArduinoServer : public IServer {
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (!running_ || server_ == nullptr) {
+            Serial.println("[Normal TCP Server] Receive message server is not running or nullptr: ");
             return nullptr;
         }
         
         // Check for new client connection
         WiFiClient client = server_->available();
         if (!client || !client.connected()) {
+            Serial.println("[Normal TCP Server] Receive message: no client or not connected: ");
             return nullptr;
         }
         
