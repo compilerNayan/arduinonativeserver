@@ -18,7 +18,7 @@
  * Firebase-style server implementation of IServer interface.
  * Fetches latest key-value from Firebase (consume-on-read), parses value as HTTP request.
  */
-/* @ServerImpl("arduinofirebaseserver") */
+// -- @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
     Private UInt port_;
     Private Bool running_;
