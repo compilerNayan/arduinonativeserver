@@ -60,7 +60,7 @@ class ArduinoFirebaseServer : public IServer {
         String url = "https://" + String(ARDUINO_FIREBASE_HOST) + path + ".json?orderBy=%22%24key%22&limitToLast=1&auth=" + String(ARDUINO_FIREBASE_AUTH);
 
         const int maxRetries = 4;
-        const int retryDelayMs = 400;
+        const int retryDelayMs = 50;
         HTTPClient http;
         int code = -1;
         for (int attempt = 0; attempt < maxRetries; attempt++) {
