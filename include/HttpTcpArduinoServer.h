@@ -24,7 +24,7 @@ struct SenderDetails {
  * HTTP TCP Server implementation of IServer interface
  * Simple implementation using WiFiServer (tested and working)
  */
-/* @ServerImpl("arduinotcpserver") */
+/// // -- @ServerImpl("arduinotcpserver") */
 class HttpTcpArduinoServer : public IServer {
     Private UInt port_;
     Private WiFiServer* server_;
