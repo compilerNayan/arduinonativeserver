@@ -5,8 +5,6 @@
 #include "IHttpRequest.h"
 #include <Arduino.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <ArduinoJson.h>
 #include <Firebase_ESP_Client.h>
 
 // Firebase credentials (from exp1). WiFi is assumed already connected by the application.
@@ -16,7 +14,8 @@
 
 /**
  * Firebase-style server implementation of IServer interface.
- * Fetches latest key-value from Firebase (consume-on-read), parses value as HTTP request.
+ * Reads message from Firebase at path via Firebase.RTDB.get(), deletes node after read,
+ * parses value as HTTP request.
  */
 /* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
@@ -32,6 +31,7 @@ class ArduinoFirebaseServer : public IServer {
     Private FirebaseData fbdo_;
     Private FirebaseAuth auth_;
     Private FirebaseConfig config_;
+    Private ULong lastReceiveCallMs_;
 
     Private StdString GenerateGuid() {
         StdString guid = "";
@@ -49,85 +49,54 @@ class ArduinoFirebaseServer : public IServer {
         return guid;
     }
 
-    /** Fetches the latest child via REST, then deletes it from Firebase (consume-on-read). */
-    Private Bool GetLatestFromFirebase(StdString& outKey, StdString& outValue) {
+    /** Returns the Firebase path to read (normalized, e.g. "/" when empty). */
+    Private StdString GetFirebasePath() const {
+        String path = String(ARDUINO_FIREBASE_PATH);
+        if (path.length() == 0) return StdString("/");
+        if (path[0] != '/') return StdString("/") + StdString(path.c_str());
+        return StdString(path.c_str());
+    }
+
+    /**
+     * Read message from Firebase at path, then delete the node (consume-on-read).
+     * Uses Firebase.RTDB.get() and Firebase.RTDB.deleteNode().
+     * @param outMessage The value at path as string (e.g. raw HTTP request); unchanged on failure
+     * @return true if get succeeded (outMessage may be empty if node was empty), false on error
+     */
+    Private Bool ReadMessageFromFirebaseAndDelete(StdString& outMessage) {
         if (WiFi.status() != WL_CONNECTED) {
             return false;
         }
-        String path = String(ARDUINO_FIREBASE_PATH);
-        if (path.length() && !path.startsWith("/")) path = "/" + path;
-        if (path.length() == 0) path = "/";
-        String url = "https://" + String(ARDUINO_FIREBASE_HOST) + path + ".json?orderBy=%22%24key%22&limitToLast=1&auth=" + String(ARDUINO_FIREBASE_AUTH);
-
-        const int maxRetries = 4;
-        const int retryDelayMs = 400;
-        HTTPClient http;
-        int code = -1;
-        for (int attempt = 0; attempt < maxRetries; attempt++) {
-            http.begin(url);
-            code = http.GET();
-            if (code == 200) {
-                break;
-            }
-            http.end();
-            if (attempt < maxRetries - 1) {
-                delay(retryDelayMs);
-            }
+        if (!Firebase.ready()) {
+            return false;
         }
-        Bool ok = (code == 200);
-        if (ok) {
-            String payload = http.getString();
-            http.end();
-
-            DynamicJsonDocument doc(1024);
-            if (deserializeJson(doc, payload) != DeserializationError::Ok || !doc.is<JsonObject>()) {
-                outKey = "";
-                outValue = StdString(payload.c_str());
-                return true;
-            }
-            JsonObject obj = doc.as<JsonObject>();
-            if (obj.size() == 0) {
-                outKey = "";
-                outValue = "";
-                return true;
-            }
-            JsonPair p = *obj.begin();
-            outKey = StdString(p.key().c_str());
-            if (p.value().is<String>())
-                outValue = StdString(p.value().as<String>().c_str());
-            else {
-                String valStr;
-                serializeJson(p.value(), valStr);
-                outValue = StdString(valStr.c_str());
-            }
-
-            if (outKey.length() > 0 && Firebase.ready()) {
-                String nodePath = path;
-                if (!nodePath.endsWith("/")) nodePath += "/";
-                nodePath += outKey.c_str();
-                if (!Firebase.RTDB.deleteNode(&fbdo_, nodePath.c_str())) {
-                    Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
-                }
-            }
-        } else {
-            http.end();
-            Serial.printf("[ArduinoFirebaseServer] HTTP %d (after %d attempt(s))\n", code, maxRetries);
+        StdString path = GetFirebasePath();
+        if (path.empty()) {
+            return false;
         }
-        return ok;
+        if (!Firebase.RTDB.get(&fbdo_, path.c_str())) {
+            Serial.printf("[ArduinoFirebaseServer] Firebase get failed: %s\n", fbdo_.errorReason().c_str());
+            return false;
+        }
+        outMessage = StdString(fbdo_.to<String>().c_str());
+        if (!Firebase.RTDB.deleteNode(&fbdo_, path.c_str())) {
+            Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
+        }
+        return true;
     }
 
     Public ArduinoFirebaseServer()
         : port_(DEFAULT_SERVER_PORT), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000) {
+          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
     }
 
     Public ArduinoFirebaseServer(CUInt port)
         : port_(port), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000) {
+          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
     }
 
     Public Virtual ~ArduinoFirebaseServer() override {
@@ -174,21 +143,43 @@ class ArduinoFirebaseServer : public IServer {
         return true;
     }
 
+    /**
+     * ReceiveMessage: follows exp1 pattern (get at path -> read data -> delete node).
+     * When idle and ready, do get; if data available, use it and delete; then throttle before next get.
+     */
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (!running_) {
             return nullptr;
         }
-        StdString outKey, outValue;
-        if (!GetLatestFromFirebase(outKey, outValue)) {
+        if (WiFi.status() != WL_CONNECTED) {
             return nullptr;
         }
-        if (outValue.empty()) {
+        if (!Firebase.ready()) {
             return nullptr;
         }
+        const ULong throttleMs = 1000;
+        if ((ULong)(millis() - lastReceiveCallMs_) < throttleMs) {
+            return nullptr;
+        }
+        StdString path = GetFirebasePath();
+        if (path.empty()) {
+            return nullptr;
+        }
+        if (!Firebase.RTDB.get(&fbdo_, path.c_str())) {
+            Serial.printf("[ArduinoFirebaseServer] Firebase get failed: %s\n", fbdo_.errorReason().c_str());
+            return nullptr;
+        }
+        StdString outMessage = StdString(fbdo_.to<String>().c_str());
+        if (outMessage.empty()) {
+            return nullptr;
+        }
+        if (!Firebase.RTDB.deleteNode(&fbdo_, path.c_str())) {
+            Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
+        }
+        lastReceiveCallMs_ = millis();
         Serial.println("[ArduinoFirebaseServer] Receive message: ");
-        StdString requestId = "ignore";
         receivedMessageCount_++;
-        return IHttpRequest::GetRequest(requestId, outValue);
+        return IHttpRequest::GetRequest(GenerateGuid(), outMessage);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
