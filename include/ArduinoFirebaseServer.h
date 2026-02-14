@@ -5,17 +5,19 @@
 #include "IHttpRequest.h"
 #include <Arduino.h>
 #include <WiFi.h>
-#include <Firebase_ESP_Client.h>
+#include <WiFiClientSecure.h>
+#include <FirebaseClient.h>
 
 // Firebase credentials (from exp1). WiFi is assumed already connected by the application.
 #define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define ARDUINO_FIREBASE_AUTH "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"
-#define ARDUINO_FIREBASE_PATH ""
+#define ARDUINO_FIREBASE_PATH "/"
 
 /**
  * Firebase-style server implementation of IServer interface.
- * Reads message from Firebase at path via Firebase.RTDB.get(), deletes node after read,
- * parses value as HTTP request.
+ * Uses FirebaseClient (async): get at path -> read data -> remove node.
+ * Follows exp1 pattern: state 0=idle, 1=waiting get, 2=waiting remove.
+ * Project using this must have build_flags: -DENABLE_DATABASE -DENABLE_LEGACY_TOKEN (and optionally -DFIREBASE_SSE_TIMEOUT_MS=40000).
  */
 /* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
@@ -28,10 +30,51 @@ class ArduinoFirebaseServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
-    Private FirebaseData fbdo_;
-    Private FirebaseAuth auth_;
-    Private FirebaseConfig config_;
-    Private ULong lastReceiveCallMs_;
+
+    Private WiFiClientSecure ssl_client_;
+    Private AsyncClientClass async_client_;
+    Private LegacyToken auth_;
+    Private FirebaseApp app_;
+    Private RealtimeDatabase database_;
+    Private AsyncResult dbResult_;
+    Private Int state_;           // 0=idle, 1=waiting get, 2=waiting remove
+    Private StdString pendingMessage_;
+    Private Bool messageReady_;
+
+    Static ArduinoFirebaseServer* s_instance_;
+
+    Static Void OnFirebaseResult(AsyncResult& aResult) {
+        if (s_instance_) {
+            s_instance_->ProcessFirebaseResult(aResult);
+        }
+    }
+
+    Void ProcessFirebaseResult(AsyncResult& aResult) {
+        if (!aResult.isResult())
+            return;
+        if (aResult.isError()) {
+            Int code = aResult.error().code();
+            if (code == -118) {
+                aResult.clear();
+                state_ = 0;
+                return;
+            }
+            Serial.printf("[ArduinoFirebaseServer] Error: %s code %d\n", aResult.error().message().c_str(), code);
+            state_ = 0;
+            return;
+        }
+        if (state_ == 1 && aResult.available()) {
+            pendingMessage_ = StdString(aResult.c_str());
+            state_ = 2;
+            StdString path = GetFirebasePath();
+            database_.remove(async_client_, path.c_str(), dbResult_);
+            return;
+        }
+        if (state_ == 2) {
+            messageReady_ = true;
+            state_ = 0;
+        }
+    }
 
     Private StdString GenerateGuid() {
         StdString guid = "";
@@ -49,57 +92,29 @@ class ArduinoFirebaseServer : public IServer {
         return guid;
     }
 
-    /** Returns the Firebase path to read (normalized, e.g. "/" when empty). */
     Private StdString GetFirebasePath() const {
-        String path = String(ARDUINO_FIREBASE_PATH);
-        if (path.length() == 0) return StdString("/");
-        if (path[0] != '/') return StdString("/") + StdString(path.c_str());
-        return StdString(path.c_str());
-    }
-
-    /**
-     * Read message from Firebase at path, then delete the node (consume-on-read).
-     * Uses Firebase.RTDB.get() and Firebase.RTDB.deleteNode().
-     * @param outMessage The value at path as string (e.g. raw HTTP request); unchanged on failure
-     * @return true if get succeeded (outMessage may be empty if node was empty), false on error
-     */
-    Private Bool ReadMessageFromFirebaseAndDelete(StdString& outMessage) {
-        if (WiFi.status() != WL_CONNECTED) {
-            return false;
-        }
-        if (!Firebase.ready()) {
-            return false;
-        }
-        StdString path = GetFirebasePath();
-        if (path.empty()) {
-            return false;
-        }
-        if (!Firebase.RTDB.get(&fbdo_, path.c_str())) {
-            Serial.printf("[ArduinoFirebaseServer] Firebase get failed: %s\n", fbdo_.errorReason().c_str());
-            return false;
-        }
-        outMessage = StdString(fbdo_.to<String>().c_str());
-        if (!Firebase.RTDB.deleteNode(&fbdo_, path.c_str())) {
-            Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
-        }
-        return true;
+        return StdString(ARDUINO_FIREBASE_PATH);
     }
 
     Public ArduinoFirebaseServer()
         : port_(DEFAULT_SERVER_PORT), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000),
+          auth_(ARDUINO_FIREBASE_AUTH), state_(0), messageReady_(false) {
     }
 
     Public ArduinoFirebaseServer(CUInt port)
         : port_(port), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000), lastReceiveCallMs_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000),
+          auth_(ARDUINO_FIREBASE_AUTH), state_(0), messageReady_(false) {
     }
 
     Public Virtual ~ArduinoFirebaseServer() override {
+        if (s_instance_ == this)
+            s_instance_ = nullptr;
         Stop();
     }
 
@@ -108,18 +123,20 @@ class ArduinoFirebaseServer : public IServer {
             return false;
         }
         port_ = port;
-        config_.database_url = String("https://") + ARDUINO_FIREBASE_HOST;
-        config_.signer.tokens.legacy_token = ARDUINO_FIREBASE_AUTH;
-        fbdo_.setBSSLBufferSize(4096, 1024);
-        fbdo_.setResponseSize(2048);
-        Firebase.begin(&config_, &auth_);
-        Firebase.reconnectWiFi(true);
+        s_instance_ = this;
+        ssl_client_.setInsecure();
+        ssl_client_.setHandshakeTimeout(5);
+        initializeApp(async_client_, app_, auth_.get(), OnFirebaseResult, "auth");
+        app_.getApp<RealtimeDatabase>(database_);
+        database_.url(("https://" ARDUINO_FIREBASE_HOST));
         running_ = true;
         ipAddress_ = WiFi.status() == WL_CONNECTED ? StdString(WiFi.localIP().toString().c_str()) : StdString("0.0.0.0");
         return true;
     }
 
     Public Virtual Void Stop() override {
+        if (s_instance_ == this)
+            s_instance_ = nullptr;
         running_ = false;
     }
 
@@ -144,42 +161,31 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     /**
-     * ReceiveMessage: follows exp1 pattern (get at path -> read data -> delete node).
-     * When idle and ready, do get; if data available, use it and delete; then throttle before next get.
+     * ReceiveMessage: follows exp1 async pattern.
+     * Calls app.loop() and processData; when a message is ready (get -> read -> remove done), returns it.
      */
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (!running_) {
             return nullptr;
         }
-        if (WiFi.status() != WL_CONNECTED) {
-            return nullptr;
+        app_.loop();
+        ProcessFirebaseResult(dbResult_);
+
+        if (messageReady_ && !pendingMessage_.empty()) {
+            messageReady_ = false;
+            StdString msg = pendingMessage_;
+            pendingMessage_.clear();
+            Serial.println("[ArduinoFirebaseServer] Receive message: ");
+            receivedMessageCount_++;
+            return IHttpRequest::GetRequest(GenerateGuid(), msg);
         }
-        if (!Firebase.ready()) {
-            return nullptr;
+
+        if (app_.ready() && state_ == 0) {
+            state_ = 1;
+            StdString path = GetFirebasePath();
+            database_.get(async_client_, path.c_str(), dbResult_, false);
         }
-        const ULong throttleMs = 1000;
-        if ((ULong)(millis() - lastReceiveCallMs_) < throttleMs) {
-            return nullptr;
-        }
-        StdString path = GetFirebasePath();
-        if (path.empty()) {
-            return nullptr;
-        }
-        if (!Firebase.RTDB.get(&fbdo_, path.c_str())) {
-            Serial.printf("[ArduinoFirebaseServer] Firebase get failed: %s\n", fbdo_.errorReason().c_str());
-            return nullptr;
-        }
-        StdString outMessage = StdString(fbdo_.to<String>().c_str());
-        if (outMessage.empty()) {
-            return nullptr;
-        }
-        if (!Firebase.RTDB.deleteNode(&fbdo_, path.c_str())) {
-            Serial.printf("[ArduinoFirebaseServer] Firebase delete failed: %s\n", fbdo_.errorReason().c_str());
-        }
-        lastReceiveCallMs_ = millis();
-        Serial.println("[ArduinoFirebaseServer] Receive message: ");
-        receivedMessageCount_++;
-        return IHttpRequest::GetRequest(GenerateGuid(), outMessage);
+        return nullptr;
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
@@ -238,11 +244,11 @@ class ArduinoFirebaseServer : public IServer {
         return ServerType::Unknown;
     }
 
-
     Public Virtual StdString GetId() const override {
         return StdString("arduinofirebaseserver");
     }
-
 };
+
+inline ArduinoFirebaseServer* ArduinoFirebaseServer::s_instance_ = nullptr;
 
 #endif // ArduinoFirebaseServer_H
