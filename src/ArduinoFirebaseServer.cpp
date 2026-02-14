@@ -4,6 +4,9 @@
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
 
+// Disambiguate: FirebaseClient has both firebase_ns::AsyncResult and ::AsyncResult.
+using firebase_ns::AsyncResult;
+
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include "ArduinoFirebaseServer.h"
@@ -72,7 +75,7 @@ static StdString GenerateGuid() {
     return guid;
 }
 
-void OnFirebaseResult(firebase_ns::AsyncResult& aResult) {
+void OnFirebaseResult(AsyncResult& aResult) {
     if (ArduinoFirebaseServer::s_instance_)
         ArduinoFirebaseServer::s_instance_->ProcessFirebaseResult(&aResult);
 }
