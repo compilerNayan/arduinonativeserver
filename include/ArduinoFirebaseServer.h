@@ -1,12 +1,17 @@
 #ifndef ArduinoFirebaseServer_H
 #define ArduinoFirebaseServer_H
 
-#include "IServer.h"
-#include "IHttpRequest.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+/* Avoid name clash: StandardDefines.h (cpp_core) has "using List = std::list<T>"; FirebaseClient uses firebase_ns::List.
+   Redirect List to firebase_ns::List for this include only, then undef before IServer (which pulls StandardDefines). */
+#define List firebase_ns::List
 #include <FirebaseClient.h>
+#undef List
+
+#include "IServer.h"
+#include "IHttpRequest.h"
 
 // Firebase credentials (from exp1). WiFi is assumed already connected by the application.
 #define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
