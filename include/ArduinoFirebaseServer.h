@@ -4,6 +4,8 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 
+namespace firebase_ns { struct AsyncResult; }
+
 // Firebase credentials (from exp1). WiFi is assumed already connected by the application.
 #define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
 #define ARDUINO_FIREBASE_AUTH "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"
@@ -37,8 +39,7 @@ class ArduinoFirebaseServer : public IServer {
     /** Called from .cpp callback only; rawResult is AsyncResult*. */
     Private Void ProcessFirebaseResult(Void* rawResult);
 
-    /** Public so .cpp free-function callback can call in without friend. */
-    Public Static Void FirebaseResultCallback(Void* rawResult);
+    friend void OnFirebaseResult(firebase_ns::AsyncResult&);
 
     Public ArduinoFirebaseServer();
     Public ArduinoFirebaseServer(CUInt port);

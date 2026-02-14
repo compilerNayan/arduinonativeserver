@@ -72,8 +72,9 @@ static StdString GenerateGuid() {
     return guid;
 }
 
-static void OnFirebaseResult(AsyncResult& aResult) {
-    ArduinoFirebaseServer::FirebaseResultCallback(&aResult);
+void OnFirebaseResult(firebase_ns::AsyncResult& aResult) {
+    if (ArduinoFirebaseServer::s_instance_)
+        ArduinoFirebaseServer::s_instance_->ProcessFirebaseResult(&aResult);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,11 +104,6 @@ ArduinoFirebaseServer::~ArduinoFirebaseServer() {
     Stop();
     delete pImpl_;
     pImpl_ = nullptr;
-}
-
-void ArduinoFirebaseServer::FirebaseResultCallback(Void* rawResult) {
-    if (s_instance_ && rawResult)
-        s_instance_->ProcessFirebaseResult(rawResult);
 }
 
 void ArduinoFirebaseServer::ProcessFirebaseResult(Void* rawResult) {
