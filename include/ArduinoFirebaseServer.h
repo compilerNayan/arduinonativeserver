@@ -37,6 +37,9 @@ class ArduinoFirebaseServer : public IServer {
     /** Called from .cpp callback only; rawResult is AsyncResult*. */
     Private Void ProcessFirebaseResult(Void* rawResult);
 
+    /** Public so .cpp free-function callback can call in without friend. */
+    Public Static Void FirebaseResultCallback(Void* rawResult);
+
     Public ArduinoFirebaseServer();
     Public ArduinoFirebaseServer(CUInt port);
     Public Virtual ~ArduinoFirebaseServer() override;
