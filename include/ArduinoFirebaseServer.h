@@ -4,12 +4,6 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 
-namespace firebase_ns { struct AsyncResult; }
-
-// Firebase credentials (from exp1). WiFi is assumed already connected by the application.
-#define ARDUINO_FIREBASE_HOST "smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define ARDUINO_FIREBASE_AUTH "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"
-#define ARDUINO_FIREBASE_PATH "/"
 
 /**
  * Firebase-style server implementation of IServer interface.
@@ -20,7 +14,6 @@ namespace firebase_ns { struct AsyncResult; }
  */
 /* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
-    struct Impl;
 
     Private UInt port_;
     Private Bool running_;
@@ -31,19 +24,6 @@ class ArduinoFirebaseServer : public IServer {
     Private ULong sentMessageCount_;
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
-
-    Private Impl* pImpl_;
-
-    Static ArduinoFirebaseServer* s_instance_;
-
-    /** Called from .cpp callback only; rawResult is AsyncResult*. */
-    Private Void ProcessFirebaseResult(Void* rawResult);
-
-    friend void OnFirebaseResult(firebase_ns::AsyncResult&);
-
-    Public ArduinoFirebaseServer();
-    Public ArduinoFirebaseServer(CUInt port);
-    Public Virtual ~ArduinoFirebaseServer() override;
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override;
     Public Virtual Void Stop() override;
@@ -72,7 +52,9 @@ class ArduinoFirebaseServer : public IServer {
      * ReceiveMessage: follows exp1 async pattern.
      * Calls app.loop() and processData; when a message is ready (get -> read -> remove done), returns it.
      */
-    Public Virtual IHttpRequestPtr ReceiveMessage() override;
+    Public Virtual IHttpRequestPtr ReceiveMessage() override {
+        return nullptr;
+    }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
         (void)requestId;
