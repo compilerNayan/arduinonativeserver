@@ -6,7 +6,6 @@
   "authors": [{"name": "Nayan"}],
   "repository": {"type": "git", "url": "https://github.com/compilerNayan/arduinonativeserver.git"},
   "dependencies": {
-    "FirebaseClient": "https://github.com/mobizt/FirebaseClient.git",
     "serverlib": "https://github.com/compilerNayan/arduinolibserver.git"
   },
   "license": "MIT",
