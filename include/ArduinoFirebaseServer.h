@@ -74,20 +74,39 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        Serial.println("ReceiveMessage ArduinoFirebaseServer: ");
-        if (!firebaseRequestManager) return nullptr;
+        Serial.println("ReceiveMessage ArduinoFirebaseServer: enter");
+        if (!firebaseRequestManager) {
+            Serial.println("ReceiveMessage: firebaseRequestManager is null");
+            return nullptr;
+        }
 
         StdString firstPair = firebaseRequestManager->RetrieveRequest();
-        if (firstPair.empty()) return nullptr;
+        if (firstPair.empty()) {
+            Serial.println("ReceiveMessage: RetrieveRequest returned empty");
+            return nullptr;
+        }
+        Serial.print("ReceiveMessage: raw firstPair length=");
+        Serial.println(firstPair.size());
+        Serial.print("ReceiveMessage: firstPair (first 200 chars): ");
+        Serial.println(firstPair.substr(0, 200).c_str());
 
         Size colonPos = firstPair.find(':');
         StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
             ? firstPair.substr(colonPos + 1)
             : firstPair;
-        if (value.empty()) return nullptr;
+        if (value.empty()) {
+            Serial.println("ReceiveMessage: value after parse is empty");
+            return nullptr;
+        }
+        Serial.print("ReceiveMessage: value length=");
+        Serial.println(value.size());
+        Serial.print("ReceiveMessage: value (first 200 chars): ");
+        Serial.println(value.substr(0, 200).c_str());
 
         StdString requestId = "ignore";
         receivedMessageCount_++;
+        Serial.print("ReceiveMessage: returning IHttpRequest, requestId=");
+        Serial.println(requestId.c_str());
 
         return IHttpRequest::GetRequest(requestId, value);
     }

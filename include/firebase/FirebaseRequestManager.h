@@ -97,39 +97,64 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
     Public Virtual StdString RetrieveRequest() override {
         StdString fromQueue;
-        if (TryDequeue(fromQueue))
+        if (TryDequeue(fromQueue)) {
+            Serial.print("RetrieveRequest: returned from queue, length=");
+            Serial.println(fromQueue.size());
             return fromQueue;
+        }
 
-        if (retrieving_.exchange(true))
+        if (retrieving_.exchange(true)) {
+            Serial.println("RetrieveRequest: another retrieve in progress, return empty");
             return StdString();
+        }
         struct ClearFlag {
             std::atomic<bool>& f;
             ~ClearFlag() { f.store(false); }
         } guard{retrieving_};
 
+        Serial.println("RetrieveRequest: fetching from Firebase");
         StdList<StdString> result;
         EnsureFirebaseBegin();
-        if (!Firebase.ready()) return StdString();
+        if (!Firebase.ready()) {
+            Serial.println("RetrieveRequest: Firebase not ready");
+            return StdString();
+        }
 
         EnsureStreamBegin();
-        if (!Firebase.RTDB.readStream(&fbdo))
+        if (!Firebase.RTDB.readStream(&fbdo)) {
+            Serial.print("RetrieveRequest: readStream failed ");
+            Serial.println(fbdo.errorReason().c_str());
             return StdString();
+        }
 
-        if (!fbdo.streamAvailable())
+        if (!fbdo.streamAvailable()) {
+            Serial.println("RetrieveRequest: stream not available");
             return StdString();
+        }
 
         String raw = fbdo.to<String>();
         StdString payload(raw.c_str());
+        Serial.print("RetrieveRequest: stream payload length=");
+        Serial.println(payload.size());
+
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
+        Serial.print("RetrieveRequest: parsed ");
+        Serial.print(result.size());
+        Serial.println(" key:value pair(s)");
 
         Firebase.RTDB.deleteNode(&fbdoDel, kPath());
+        Serial.println("RetrieveRequest: deleteNode done");
 
         for (const StdString& s : result)
             EnqueueRequest(s);
 
-        if (TryDequeue(fromQueue))
+        if (TryDequeue(fromQueue)) {
+            Serial.print("RetrieveRequest: return first from new batch, length=");
+            Serial.println(fromQueue.size());
             return fromQueue;
+        }
+        Serial.println("RetrieveRequest: queue empty after enqueue, return empty");
         return StdString();
     }
 };
