@@ -36,6 +36,14 @@ class ArduinoFirebaseServer : public IServer {
         return port_;
     }
 
+    Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
+        return true;
+    }
+
+    Public Virtual Void Stop() override {
+        return;
+    }
+
     Public Virtual StdString GetIpAddress() const override {
         return ipAddress_.empty() ? StdString("0.0.0.0") : ipAddress_;
     }
