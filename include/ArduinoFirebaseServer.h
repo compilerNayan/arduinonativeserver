@@ -3,14 +3,13 @@
 
 #include "IServer.h"
 #include "IHttpRequest.h"
-
+#include "firebase/IFirebaseRequestManager.h"
+#include <Arduino.h>
 
 /**
  * Firebase-style server implementation of IServer interface.
- * Uses FirebaseClient (async): get at path -> read data -> remove node.
- * Follows exp1 pattern: state 0=idle, 1=waiting get, 2=waiting remove.
+ * Header-only. Uses IFirebaseRequestManager: RetrieveRequests() -> first "key:value" -> value as raw HTTP request.
  * Project using this must have build_flags: -DENABLE_DATABASE -DENABLE_LEGACY_TOKEN (and optionally -DFIREBASE_SSE_TIMEOUT_MS=40000).
- * Implementation is in ArduinoFirebaseServer.cpp so FirebaseClient is never compiled in a TU that has already included StandardDefines (avoids List name clash).
  */
 /* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
@@ -25,6 +24,25 @@ class ArduinoFirebaseServer : public IServer {
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
 
+    /* @Autowired */
+    Private IFirebaseRequestManagerPtr firebaseRequestManager;
+
+    Private Static StdString GenerateGuid() {
+        StdString guid;
+        const char hexChars[] = "0123456789abcdef";
+        for (Size i = 0; i < 8; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        for (Size i = 0; i < 4; i++) guid += hexChars[random(0, 16)];
+        guid += "-4";
+        for (Size i = 0; i < 3; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        guid += hexChars[random(8, 12)];
+        for (Size i = 0; i < 3; i++) guid += hexChars[random(0, 16)];
+        guid += "-";
+        for (Size i = 0; i < 12; i++) guid += hexChars[random(0, 16)];
+        return guid;
+    }
+
     Public Virtual Bool IsRunning() const override {
         return running_;
     }
@@ -34,11 +52,13 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
+        port_ = port;
+        running_ = true;
         return true;
     }
 
     Public Virtual Void Stop() override {
-        return;
+        running_ = false;
     }
 
     Public Virtual StdString GetIpAddress() const override {
@@ -53,12 +73,23 @@ class ArduinoFirebaseServer : public IServer {
         return true;
     }
 
-    /**
-     * ReceiveMessage: follows exp1 async pattern.
-     * Calls app.loop() and processData; when a message is ready (get -> read -> remove done), returns it.
-     */
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        return nullptr;
+        if (!firebaseRequestManager) return nullptr;
+
+        StdList<StdString> pairs = firebaseRequestManager->RetrieveRequests();
+        if (pairs.empty()) return nullptr;
+
+        const StdString& firstPair = pairs.front();
+        Size colonPos = firstPair.find(':');
+        StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
+            ? firstPair.substr(colonPos + 1)
+            : firstPair;
+        if (value.empty()) return nullptr;
+
+        StdString requestId = "ignore";
+        receivedMessageCount_++;
+
+        return IHttpRequest::GetRequest(requestId, value);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
