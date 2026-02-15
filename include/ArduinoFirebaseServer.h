@@ -108,7 +108,7 @@ class ArduinoFirebaseServer : public IServer {
         Serial.print("ReceiveMessage: returning IHttpRequest, requestId=");
         Serial.println(requestId.c_str());
 
-        return IHttpRequest::GetRequest(requestId, value);
+        return nullptr;//IHttpRequest::GetRequest(requestId, value);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {

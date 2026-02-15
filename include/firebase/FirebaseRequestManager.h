@@ -117,19 +117,19 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         Serial.println("RetrieveRequest: fetching from Firebase");
         StdList<StdString> result;
         EnsureFirebaseBegin();
-        const int kReadyRetries = 20;
+        const int kReadyRetries = 6;
         const int kReadyDelayMs = 500;
         for (int i = 0; i < kReadyRetries && !Firebase.ready(); i++) {
             if (i == 0)
-                Serial.println("RetrieveRequest: Firebase not ready, waiting (up to 10s)...");
+                Serial.println("RetrieveRequest: Firebase not ready, waiting (up to 3s)...");
             delay(kReadyDelayMs);
+            yield();
         }
         if (!Firebase.ready()) {
             Serial.println("RetrieveRequest: Firebase still not ready after wait (check WiFi and credentials)");
             return StdString();
         }
-        if (kReadyRetries > 0)
-            Serial.println("RetrieveRequest: Firebase ready");
+        Serial.println("RetrieveRequest: Firebase ready");
 
         EnsureStreamBegin();
         if (!Firebase.RTDB.readStream(&fbdo)) {
