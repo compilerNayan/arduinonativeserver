@@ -12,7 +12,7 @@
  * Project using this must have build_flags: -DENABLE_DATABASE -DENABLE_LEGACY_TOKEN (and optionally -DFIREBASE_SSE_TIMEOUT_MS=40000).
  * Implementation is in ArduinoFirebaseServer.cpp so FirebaseClient is never compiled in a TU that has already included StandardDefines (avoids List name clash).
  */
-/* -- "arduinofirebaseserver") */
+/* @ServerImpl("arduinofirebaseserver") */
 class ArduinoFirebaseServer : public IServer {
 
     Private UInt port_;

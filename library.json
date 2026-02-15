@@ -6,6 +6,7 @@
   "authors": [{"name": "Nayan"}],
   "repository": {"type": "git", "url": "https://github.com/compilerNayan/arduinonativeserver.git"},
   "dependencies": {
+    "Firebase-ESP-Client": "https://github.com/mobizt/Firebase-ESP-Client.git",
     "serverlib": "https://github.com/compilerNayan/arduinolibserver.git"
   },
   "license": "MIT",
