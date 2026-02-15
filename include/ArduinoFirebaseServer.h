@@ -75,26 +75,41 @@ class ArduinoFirebaseServer : public IServer {
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (!firebaseRequestManager) {
+            Serial.println("[ArduinoFirebaseServer] ReceiveMessage: firebaseRequestManager is null");
             return nullptr;
         }
 
         StdString firstPair = firebaseRequestManager->RetrieveRequest();
         if (firstPair.empty()) {
+            Serial.println("[ArduinoFirebaseServer] ReceiveMessage: RetrieveRequest returned empty");
             return nullptr;
         }
+
+        Serial.print("[ArduinoFirebaseServer] ReceiveMessage: firstPair=");
+        Serial.println(firstPair.c_str());
 
         Size colonPos = firstPair.find(':');
         StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
             ? firstPair.substr(colonPos + 1)
             : firstPair;
         if (value.empty()) {
+            Serial.println("[ArduinoFirebaseServer] ReceiveMessage: value empty after parse");
             return nullptr;
         }
+
+        Serial.print("[ArduinoFirebaseServer] ReceiveMessage: requestId=ignore value len=");
+        Serial.println(value.size());
 
         StdString requestId = "ignore";
         receivedMessageCount_++;
 
-        return IHttpRequest::GetRequest(requestId, value);
+        IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, value);
+        if (!req) {
+            Serial.println("[ArduinoFirebaseServer] ReceiveMessage: IHttpRequest::GetRequest returned null");
+            return nullptr;
+        }
+        Serial.println("[ArduinoFirebaseServer] ReceiveMessage: returning valid IHttpRequest");
+        return req;
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
