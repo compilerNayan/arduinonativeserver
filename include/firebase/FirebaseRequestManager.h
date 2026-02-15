@@ -45,7 +45,6 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
     Private Void EnsureFirebaseBegin() {
         if (firebaseBegun) return;
-        Serial.println("RetrieveRequest(exp1): EnsureFirebaseBegin first time (Firebase.begin)");
         config.database_url = kDatabaseUrl();
         config.signer.tokens.legacy_token = kLegacyToken();
         fbdo.setBSSLBufferSize(4096, 1024);
@@ -56,17 +55,14 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         Firebase.reconnectWiFi(true);
         firebaseBegun = true;
         delay(500);
-        Serial.println("RetrieveRequest(exp1): Firebase.begin done");
     }
 
     Private Void EnsureStreamBegin() {
         if (streamBegun_) return;
         if (!Firebase.RTDB.beginStream(&fbdo, kPath())) {
-            Serial.println("RetrieveRequest(exp1): beginStream failed");
             return;
         }
         streamBegun_ = true;
-        Serial.println("RetrieveRequest(exp1): beginStream ok");
     }
 
     Private Static Void ParseJsonToKeyValuePairs(const StdString& jsonStr, StdList<StdString>& out, StdList<StdString>& outKeys) {
@@ -103,13 +99,10 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
     Public Virtual StdString RetrieveRequest() override {
         StdString fromQueue;
         if (TryDequeue(fromQueue)) {
-            Serial.print("RetrieveRequest(exp1): from queue, length=");
-            Serial.println(fromQueue.size());
             return fromQueue;
         }
 
         if (retrieving_.exchange(true)) {
-            Serial.println("RetrieveRequest(exp1): another retrieve in progress, return empty");
             return StdString();
         }
         struct ClearFlag {
@@ -117,49 +110,35 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
             ~ClearFlag() { f.store(false); }
         } guard{retrieving_};
 
-        Serial.println("RetrieveRequest(exp1): fetching from Firebase");
         StdList<StdString> result;
         EnsureFirebaseBegin();
         if (!Firebase.ready()) {
-            Serial.println("RetrieveRequest(exp1): Firebase not ready");
             return StdString();
         }
 
         EnsureStreamBegin();
         if (!Firebase.RTDB.readStream(&fbdo)) {
-            Serial.print("RetrieveRequest(exp1): readStream failed ");
-            Serial.println(fbdo.errorReason().c_str());
             return StdString();
         }
 
         if (!fbdo.streamAvailable()) {
-            Serial.println("RetrieveRequest(exp1): stream not available");
             return StdString();
         }
 
         String raw = fbdo.to<String>();
         StdString payload(raw.c_str());
-        Serial.print("RetrieveRequest(exp1): payload length=");
-        Serial.println(payload.size());
 
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
-        Serial.print("RetrieveRequest(exp1): parsed ");
-        Serial.print(result.size());
-        Serial.println(" key:value pair(s)");
 
         Firebase.RTDB.deleteNode(&fbdoDel, kPath());
-        Serial.println("RetrieveRequest(exp1): deleteNode done");
 
         for (const StdString& s : result)
             EnqueueRequest(s);
 
         if (TryDequeue(fromQueue)) {
-            Serial.print("RetrieveRequest(exp1): return first from new batch, length=");
-            Serial.println(fromQueue.size());
             return fromQueue;
         }
-        Serial.println("RetrieveRequest(exp1): queue empty after enqueue, return empty");
         return StdString();
     }
 };

@@ -281,7 +281,6 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        Serial.println("ReceiveMessage TCP: ");
 
         if (!running_ || server_ == nullptr) {
             return nullptr;
@@ -292,13 +291,11 @@ class HttpTcpArduinoServer : public IServer {
         if (!client || !client.connected()) {
             return nullptr;
         }
-        
-        Serial.println("[Normal TCP Server] Receive message: ");
-                // Store client information
+
+        // Store client information
         IPAddress clientIP = client.remoteIP();
         lastClientIp_ = StdString(clientIP.toString().c_str());
         lastClientPort_ = client.remotePort();
-        Serial.println("[Normal TCP Server] Receive message 2: ");
         
         // Read HTTP headers
         StdString requestHeaders = ReadHttpRequestHeaders(client);
@@ -315,9 +312,6 @@ class HttpTcpArduinoServer : public IServer {
         
         // Build full request string (headers + body)
         StdString fullRequest = requestHeaders + body;
-        if (!fullRequest.empty()) {
-            //Serial.println(fullRequest.c_str());
-        }
         
         // Generate GUID for this request
         StdString requestId = GenerateGuid();
