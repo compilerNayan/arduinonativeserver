@@ -8,8 +8,8 @@ class IFirebaseRequestManager {
     Public Virtual ~IFirebaseRequestManager() = default;
 
     /**
-     * @brief Retrieve requests from Firebase, delete them from the database, and return the list in one go.
-     * @return List of strings, each element is "key:value". Empty list if no data or on error.
+     * @brief Retrieve one request from Firebase (or from internal queue). Deletes from DB when fetching from Firebase.
+     * @return One "key:value" string, or empty string if no data or on error.
      */
     Public Virtual StdString RetrieveRequest() = 0;
 };
