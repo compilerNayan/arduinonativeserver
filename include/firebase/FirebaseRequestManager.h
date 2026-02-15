@@ -45,6 +45,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
     Private Void EnsureFirebaseBegin() {
         if (firebaseBegun) return;
+        Serial.println("RetrieveRequest: EnsureFirebaseBegin first time (Firebase.begin)");
         config.database_url = kDatabaseUrl();
         config.signer.tokens.legacy_token = kLegacyToken();
         fbdo.setBSSLBufferSize(4096, 1024);
@@ -55,6 +56,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         Firebase.reconnectWiFi(true);
         firebaseBegun = true;
         delay(500);
+        Serial.println("RetrieveRequest: Firebase.begin done, waiting for Firebase.ready()");
     }
 
     Private Void EnsureStreamBegin() {
@@ -116,7 +118,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         StdList<StdString> result;
         EnsureFirebaseBegin();
         if (!Firebase.ready()) {
-            Serial.println("RetrieveRequest: Firebase not ready");
+            Serial.println("RetrieveRequest: Firebase not ready (ensure WiFi connected and wait a few seconds after startup)");
             return StdString();
         }
 
