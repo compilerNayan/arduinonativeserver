@@ -25,9 +25,6 @@ class ArduinoFirebaseServer : public IServer {
     Private UInt maxMessageSize_;
     Private UInt receiveTimeout_;
 
-    Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override;
-    Public Virtual Void Stop() override;
-
     Public Virtual Bool IsRunning() const override {
         return running_;
     }
