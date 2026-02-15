@@ -281,6 +281,8 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
+        Serial.println("ReceiveMessage TCP: ");
+
         if (!running_ || server_ == nullptr) {
             return nullptr;
         }

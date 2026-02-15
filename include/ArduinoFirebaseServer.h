@@ -74,6 +74,7 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
+        Serial.println("ReceiveMessage ArduinoFirebaseServer: ");
         if (!firebaseRequestManager) return nullptr;
 
         StdString firstPair = firebaseRequestManager->RetrieveRequest();
