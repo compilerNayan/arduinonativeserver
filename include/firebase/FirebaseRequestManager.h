@@ -11,6 +11,8 @@
 
 #include "IFirebaseRequestManager.h"
 #include <atomic>
+#include <queue>
+#include <mutex>
 
 /* @Component */
 class FirebaseRequestManager : public IFirebaseRequestManager {
@@ -21,6 +23,21 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
     Private Bool firebaseBegun = false;
     Private Bool streamBegun_ = false;
     Private std::atomic<bool> retrieving_{false};
+    Private std::queue<StdString> requestQueue_;
+    Private std::mutex requestQueueMutex_;
+
+    Private Bool TryDequeue(StdString& out) {
+        std::lock_guard<std::mutex> lock(requestQueueMutex_);
+        if (requestQueue_.empty()) return false;
+        out = requestQueue_.front();
+        requestQueue_.pop();
+        return true;
+    }
+
+    Private Void EnqueueRequest(const StdString& s) {
+        std::lock_guard<std::mutex> lock(requestQueueMutex_);
+        requestQueue_.push(s);
+    }
 
     Private Static const char* kDatabaseUrl() { return "https://smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"; }
     Private Static const char* kLegacyToken() { return "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"; }
@@ -78,9 +95,13 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
     Public Virtual ~FirebaseRequestManager() = default;
 
-    Public Virtual StdList<StdString> RetrieveRequests() override {
+    Public Virtual StdString RetrieveRequest() override {
+        StdString fromQueue;
+        if (TryDequeue(fromQueue))
+            return fromQueue;
+
         if (retrieving_.exchange(true))
-            return StdList<StdString>();
+            return StdString();
         struct ClearFlag {
             std::atomic<bool>& f;
             ~ClearFlag() { f.store(false); }
@@ -88,14 +109,14 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
         StdList<StdString> result;
         EnsureFirebaseBegin();
-        if (!Firebase.ready()) return result;
+        if (!Firebase.ready()) return StdString();
 
         EnsureStreamBegin();
         if (!Firebase.RTDB.readStream(&fbdo))
-            return result;
+            return StdString();
 
         if (!fbdo.streamAvailable())
-            return result;
+            return StdString();
 
         String raw = fbdo.to<String>();
         StdString payload(raw.c_str());
@@ -104,7 +125,12 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
         Firebase.RTDB.deleteNode(&fbdoDel, kPath());
 
-        return result;
+        for (const StdString& s : result)
+            EnqueueRequest(s);
+
+        if (TryDequeue(fromQueue))
+            return fromQueue;
+        return StdString();
     }
 };
 

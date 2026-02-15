@@ -76,10 +76,9 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
         if (!firebaseRequestManager) return nullptr;
 
-        StdList<StdString> pairs = firebaseRequestManager->RetrieveRequests();
-        if (pairs.empty()) return nullptr;
+        StdString firstPair = firebaseRequestManager->RetrieveRequest();
+        if (firstPair.empty()) return nullptr;
 
-        const StdString& firstPair = pairs.front();
         Size colonPos = firstPair.find(':');
         StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
             ? firstPair.substr(colonPos + 1)

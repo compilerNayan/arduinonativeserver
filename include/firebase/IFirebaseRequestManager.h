@@ -11,7 +11,7 @@ class IFirebaseRequestManager {
      * @brief Retrieve requests from Firebase, delete them from the database, and return the list in one go.
      * @return List of strings, each element is "key:value". Empty list if no data or on error.
      */
-    Public Virtual StdList<StdString> RetrieveRequests() = 0;
+    Public Virtual StdString RetrieveRequest() = 0;
 };
 
 #endif // IFIREBASEREQUESTMANAGER_H
