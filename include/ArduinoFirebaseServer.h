@@ -94,7 +94,7 @@ class ArduinoFirebaseServer : public IServer {
         StdString requestId = "ignore";
         receivedMessageCount_++;
 
-        return nullptr;//IHttpRequest::GetRequest(requestId, value);
+        return IHttpRequest::GetRequest(requestId, value);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
