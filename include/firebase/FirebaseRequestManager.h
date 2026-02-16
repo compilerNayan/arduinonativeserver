@@ -155,9 +155,9 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
 
-        if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
-            OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
-        }
+       // if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
+       //     OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
+       // }
 
         for (const StdString& s : result)
             EnqueueRequest(s);
