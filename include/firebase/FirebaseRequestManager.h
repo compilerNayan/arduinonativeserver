@@ -148,6 +148,14 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
         if (!fbdo.streamAvailable()) {
             //OnErrorAndScheduleRefresh("stream not available");
+            unsigned long now = millis();
+            if (now - lastDeleteMillis_ >= kDeleteIntervalMs) {
+                if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
+                    OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
+                } else {
+                    lastDeleteMillis_ = now;
+                }
+            }
             return StdString();
         }
 
