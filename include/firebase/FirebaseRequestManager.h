@@ -4,7 +4,6 @@
 
 #define Vector __FirebaseVector
 #include <Arduino.h>
-#include <WiFi.h>
 #include <Firebase_ESP_Client.h>
 #include <ArduinoJson.h>
 #undef Vector
