@@ -221,10 +221,18 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
-        
         Serial.print("[HttpTcpArduinoServer] Start() called with port: ");
         Serial.println(port);
-        
+
+        if (networkStatusProvider_ != nullptr && !networkStatusProvider_->IsWiFiConnected()) {
+            Serial.println("[HttpTcpArduinoServer] ERROR: WiFi is not connected. Start aborted.");
+            return false;
+        }
+        if (networkStatusProvider_ != nullptr) {
+            storedWifiConnectionId_ = networkStatusProvider_->GetWifiConnectionId();
+        }
+        Stop();
+
         if (running_) {
             Serial.println("[HttpTcpArduinoServer] ERROR: Server is already running!");
             return false;
@@ -277,10 +285,6 @@ class HttpTcpArduinoServer : public IServer {
             Serial.println("[HttpTcpArduinoServer] WiFi not connected, IP address not set");
         }
 
-        if (networkStatusProvider_ != nullptr) {
-            storedWifiConnectionId_ = networkStatusProvider_->GetWifiConnectionId();
-        }
-        
         Serial.println("[HttpTcpArduinoServer] Start() completed successfully");
         return true;
     }
