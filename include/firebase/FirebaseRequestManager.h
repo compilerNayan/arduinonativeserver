@@ -24,6 +24,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
     Private Bool streamBegun_ = false;
     Private std::atomic<bool> retrieving_{false};
     Private std::atomic<bool> refreshing_{false};
+    Private std::atomic<bool> pendingRefresh_{false};
     Private std::queue<StdString> requestQueue_;
     Private std::mutex requestQueueMutex_;
 
@@ -58,12 +59,13 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         delay(500);
     }
 
-    Private Void EnsureStreamBegin() {
-        if (streamBegun_) return;
+    Private Bool EnsureStreamBegin() {
+        if (streamBegun_) return true;
         if (!Firebase.RTDB.beginStream(&fbdo, kPath())) {
-            return;
+            return false;
         }
         streamBegun_ = true;
+        return true;
     }
 
     Private Static Void ParseJsonToKeyValuePairs(const StdString& jsonStr, StdList<StdString>& out, StdList<StdString>& outKeys) {
@@ -97,10 +99,20 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
 
     Public Virtual ~FirebaseRequestManager() = default;
 
+    Private Void OnErrorAndScheduleRefresh(const char* msg) {
+        Serial.print("[FirebaseRequestManager] RetrieveRequest failed: ");
+        Serial.println(msg);
+        pendingRefresh_.store(true);
+    }
+
     Public Virtual StdString RetrieveRequest() override {
         StdString fromQueue;
         if (TryDequeue(fromQueue)) {
             return fromQueue;
+        }
+
+        if (pendingRefresh_.exchange(false)) {
+            RefreshConnection();
         }
 
         while (refreshing_.load(std::memory_order_relaxed)) {
@@ -118,15 +130,22 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         StdList<StdString> result;
         EnsureFirebaseBegin();
         if (!Firebase.ready()) {
+            OnErrorAndScheduleRefresh("Firebase not ready");
             return StdString();
         }
 
-        EnsureStreamBegin();
+        if (!EnsureStreamBegin()) {
+            OnErrorAndScheduleRefresh("beginStream failed");
+            return StdString();
+        }
+
         if (!Firebase.RTDB.readStream(&fbdo)) {
+            OnErrorAndScheduleRefresh(fbdo.errorReason().c_str());
             return StdString();
         }
 
         if (!fbdo.streamAvailable()) {
+            OnErrorAndScheduleRefresh("stream not available");
             return StdString();
         }
 
@@ -136,7 +155,9 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
 
-        Firebase.RTDB.deleteNode(&fbdoDel, kPath());
+        if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
+            OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
+        }
 
         for (const StdString& s : result)
             EnqueueRequest(s);
