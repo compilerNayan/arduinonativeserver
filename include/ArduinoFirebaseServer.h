@@ -48,6 +48,11 @@ class ArduinoFirebaseServer : public IServer {
         }
         Int currentId = networkStatusProvider_->GetWifiConnectionId();
         if (currentId != storedWifiConnectionId_) {
+            Serial.print("[ArduinoFirebaseServer] WiFi connection id changed (");
+            Serial.print(storedWifiConnectionId_);
+            Serial.print(" -> ");
+            Serial.print(currentId);
+            Serial.println("); refreshing Firebase connection");
             firebaseRequestManager->RefreshConnection();
             storedWifiConnectionId_ = currentId;
         }
@@ -116,7 +121,6 @@ class ArduinoFirebaseServer : public IServer {
             return nullptr;
         }
 
-
         Size colonPos = firstPair.find(':');
         StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
             ? firstPair.substr(colonPos + 1)
@@ -143,6 +147,7 @@ class ArduinoFirebaseServer : public IServer {
             return false;
         }
         if (!running_) {
+            Serial.println("[ArduinoFirebaseServer] SendMessage: server not running");
             return false;
         }
         sentMessageCount_++;
