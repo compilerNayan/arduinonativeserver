@@ -23,6 +23,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
     Private Bool firebaseBegun = false;
     Private Bool streamBegun_ = false;
     Private std::atomic<bool> retrieving_{false};
+    Private std::atomic<bool> refreshing_{false};
     Private std::queue<StdString> requestQueue_;
     Private std::mutex requestQueueMutex_;
 
@@ -102,6 +103,10 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
             return fromQueue;
         }
 
+        while (refreshing_.load(std::memory_order_relaxed)) {
+            delay(10);
+        }
+
         if (retrieving_.exchange(true)) {
             return StdString();
         }
@@ -140,6 +145,39 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
             return fromQueue;
         }
         return StdString();
+    }
+
+    Public Virtual Void RefreshConnection() override {
+        while (retrieving_.load(std::memory_order_relaxed)) {
+            delay(10);
+        }
+        refreshing_.store(true, std::memory_order_release);
+        struct ClearRefreshing {
+            std::atomic<bool>& f;
+            ~ClearRefreshing() { f.store(false); }
+        } guard{refreshing_};
+
+        if (streamBegun_) {
+            Firebase.RTDB.endStream(&fbdo);
+            streamBegun_ = false;
+        }
+        firebaseBegun = false;
+
+        EnsureFirebaseBegin();
+        if (Firebase.ready()) {
+            EnsureStreamBegin();
+        }
+    }
+
+    Public Virtual Void DismissConnection() override {
+        while (retrieving_.load(std::memory_order_relaxed)) {
+            delay(10);
+        }
+        if (streamBegun_) {
+            Firebase.RTDB.endStream(&fbdo);
+            streamBegun_ = false;
+        }
+        firebaseBegun = false;
     }
 };
 

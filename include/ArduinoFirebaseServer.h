@@ -4,6 +4,7 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include "firebase/IFirebaseRequestManager.h"
+#include "INetworkStatusProvider.h"
 #include <Arduino.h>
 
 /**
@@ -26,6 +27,32 @@ class ArduinoFirebaseServer : public IServer {
 
     /* @Autowired */
     Private IFirebaseRequestManagerPtr firebaseRequestManager;
+    /* @Autowired */
+    Private INetworkStatusProviderPtr networkStatusProvider_;
+    Private Int storedWifiConnectionId_;
+
+    /**
+     * Ensures WiFi and internet are up and Firebase is bound to current WiFi id.
+     * If WiFi not connected or internet not connected: DismissConnection(), return false.
+     * If WiFi id changed: RefreshConnection(), update stored id, return true.
+     * Otherwise return true. Call before ReceiveMessage/SendMessage.
+     */
+    Private Bool EnsureNetworkAndFirebaseMatch() {
+        if (!networkStatusProvider_->IsWiFiConnected()) {
+            firebaseRequestManager->DismissConnection();
+            return false;
+        }
+        if (!networkStatusProvider_->IsInternetConnected()) {
+            firebaseRequestManager->DismissConnection();
+            return false;
+        }
+        Int currentId = networkStatusProvider_->GetWifiConnectionId();
+        if (currentId != storedWifiConnectionId_) {
+            firebaseRequestManager->RefreshConnection();
+            storedWifiConnectionId_ = currentId;
+        }
+        return true;
+    }
 
     Private Static StdString GenerateGuid() {
         StdString guid;
@@ -54,6 +81,9 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
         port_ = port;
         running_ = true;
+        if (networkStatusProvider_ != nullptr) {
+            storedWifiConnectionId_ = networkStatusProvider_->GetWifiConnectionId();
+        }
         return true;
     }
 
@@ -74,6 +104,9 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
+        if (!EnsureNetworkAndFirebaseMatch()) {
+            return nullptr;
+        }
         if (!firebaseRequestManager) {
             Serial.println("[ArduinoFirebaseServer] ReceiveMessage: firebaseRequestManager is null");
             return nullptr;
@@ -115,6 +148,9 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
         (void)requestId;
         (void)message;
+        if (!EnsureNetworkAndFirebaseMatch()) {
+            return false;
+        }
         if (!running_) {
             return false;
         }

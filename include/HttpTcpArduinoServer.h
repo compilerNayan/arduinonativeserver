@@ -221,9 +221,6 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
-        if (!EnsureWifiAndServerMatch()) {
-            return false;
-        }
         
         Serial.print("[HttpTcpArduinoServer] Start() called with port: ");
         Serial.println(port);
