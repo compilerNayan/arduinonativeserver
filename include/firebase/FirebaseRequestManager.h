@@ -178,11 +178,12 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
             ~ClearRefreshing() { f.store(false); }
         } guard{refreshing_};
 
-        if (streamBegun_) {
-            Firebase.RTDB.endStream(&fbdo);
-            streamBegun_ = false;
-        }
+        // Always call endStream to clear library state (even if we think stream wasn't started).
+        // Stuck internal state after a failure can cause beginStream to fail until reboot otherwise.
+        Firebase.RTDB.endStream(&fbdo);
+        streamBegun_ = false;
         firebaseBegun = false;
+        delay(200);
 
         EnsureFirebaseBegin();
         if (Firebase.ready()) {
@@ -194,10 +195,9 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         while (retrieving_.load(std::memory_order_relaxed)) {
             delay(10);
         }
-        if (streamBegun_) {
-            Firebase.RTDB.endStream(&fbdo);
-            streamBegun_ = false;
-        }
+        // Always call endStream to clear library state (even if streamBegun_ was false).
+        Firebase.RTDB.endStream(&fbdo);
+        streamBegun_ = false;
         firebaseBegun = false;
     }
 };
