@@ -44,6 +44,8 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
     Private Static const char* kDatabaseUrl() { return "https://smart-switch-da084-default-rtdb.asia-southeast1.firebasedatabase.app"; }
     Private Static const char* kLegacyToken() { return "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"; }
     Private Static const char* kPath() { return "/"; }
+    Private Static const unsigned long kDeleteIntervalMs = 60000;  // 1 min between deletes at /
+    Private unsigned long lastDeleteMillis_ = 0;
 
     Private Void EnsureFirebaseBegin() {
         if (firebaseBegun) return;
@@ -155,8 +157,13 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
 
-        if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
-            OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
+        unsigned long now = millis();
+        if (now - lastDeleteMillis_ >= kDeleteIntervalMs) {
+            if (!Firebase.RTDB.deleteNode(&fbdoDel, kPath())) {
+                OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
+            } else {
+                lastDeleteMillis_ = now;
+            }
         }
 
         for (const StdString& s : result)
