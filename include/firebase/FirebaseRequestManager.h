@@ -145,7 +145,7 @@ class FirebaseRequestManager : public IFirebaseRequestManager {
         }
 
         if (!fbdo.streamAvailable()) {
-            OnErrorAndScheduleRefresh("stream not available");
+            //OnErrorAndScheduleRefresh("stream not available");
             return StdString();
         }
 
