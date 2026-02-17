@@ -4,7 +4,7 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include "firebase/IFirebaseRequestManager.h"
-#include "INetworkStatusProvider.h"
+#include <INetworkStatusProvider.h>
 #include <IArduinoRemoteStorage.h>
 #include <Arduino.h>
 
