@@ -4,6 +4,7 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include <INetworkStatusProvider.h>
+#include <ILogger.h>
 #include <WiFiServer.h>
 #include <WiFiClient.h>
 #include <Arduino.h>
@@ -41,6 +42,8 @@ class HttpTcpArduinoServer : public IServer {
 
     /* @Autowired */
     Private INetworkStatusProviderPtr networkStatusProvider_;
+    /* @Autowired */
+    Private ILoggerPtr logger;
     Private Int storedWifiConnectionId_;
 
     /**
@@ -221,11 +224,10 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
-        Serial.print("[HttpTcpArduinoServer] Start() called with port: ");
-        Serial.println(port);
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() called with port: " + std::to_string(port)));
 
         if (networkStatusProvider_ != nullptr && !networkStatusProvider_->IsWiFiConnected()) {
-            Serial.println("[HttpTcpArduinoServer] ERROR: WiFi is not connected. Start aborted.");
+            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: WiFi is not connected. Start aborted."));
             return false;
         }
         if (networkStatusProvider_ != nullptr) {
@@ -234,58 +236,50 @@ class HttpTcpArduinoServer : public IServer {
         Stop();
 
         if (running_) {
-            Serial.println("[HttpTcpArduinoServer] ERROR: Server is already running!");
+            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Server is already running!"));
             return false;
         }
 
         port_ = port;
-        Serial.print("[HttpTcpArduinoServer] Port set to: ");
-        Serial.println(port_);
-        
-        Serial.println("[HttpTcpArduinoServer] Step 1: Cleaning up existing server instance...");
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Port set to: " + std::to_string(port_)));
+
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 1: Cleaning up existing server instance..."));
         if (server_ != nullptr) {
             delete server_;
             server_ = nullptr;
-            Serial.println("[HttpTcpArduinoServer] Old server instance deleted");
-        }
-        
-        Serial.println("[HttpTcpArduinoServer] Step 2: Creating new WiFiServer instance...");
-        server_ = new WiFiServer(static_cast<uint16_t>(port_));
-        if (server_ == nullptr) {
-            Serial.println("[HttpTcpArduinoServer] ERROR: Failed to allocate memory for WiFiServer!");
-            return false;
-        }
-        Serial.println("[HttpTcpArduinoServer] WiFiServer instance created successfully");
-        
-        Serial.println("[HttpTcpArduinoServer] Step 3: Checking WiFi status...");
-        wl_status_t wifiStatus = WiFi.status();
-        Serial.print("[HttpTcpArduinoServer] WiFi status: ");
-        Serial.println(wifiStatus);
-        if (wifiStatus != WL_CONNECTED) {
-            Serial.print("[HttpTcpArduinoServer] WARNING: WiFi is not connected (status: ");
-            Serial.print(wifiStatus);
-            Serial.println("). Server may not work properly.");
-        } else {
-            Serial.print("[HttpTcpArduinoServer] WiFi is connected. Local IP: ");
-            Serial.println(WiFi.localIP());
-        }
-        
-        Serial.println("[HttpTcpArduinoServer] Step 4: Starting server with server_->begin()...");
-        server_->begin();
-        running_ = true;
-        Serial.print("[HttpTcpArduinoServer] Server started. Running: ");
-        Serial.println(running_ ? "true" : "false");
-        
-        // Get actual IP address if WiFi is connected
-        if (WiFi.status() == WL_CONNECTED) {
-            ipAddress_ = StdString(WiFi.localIP().toString().c_str());
-            Serial.print("[HttpTcpArduinoServer] Server IP address: ");
-            Serial.println(ipAddress_.c_str());
-        } else {
-            Serial.println("[HttpTcpArduinoServer] WiFi not connected, IP address not set");
+            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Old server instance deleted"));
         }
 
-        Serial.println("[HttpTcpArduinoServer] Start() completed successfully");
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 2: Creating new WiFiServer instance..."));
+        server_ = new WiFiServer(static_cast<uint16_t>(port_));
+        if (server_ == nullptr) {
+            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Failed to allocate memory for WiFiServer!"));
+            return false;
+        }
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFiServer instance created successfully"));
+
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 3: Checking WiFi status..."));
+        wl_status_t wifiStatus = WiFi.status();
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi status: " + std::to_string(wifiStatus)));
+        if (wifiStatus != WL_CONNECTED) {
+            logger->Warning(Tag::Untagged, StdString("[HttpTcpArduinoServer] WARNING: WiFi is not connected (status: " + std::to_string(wifiStatus) + "). Server may not work properly."));
+        } else {
+            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi is connected. Local IP: " + StdString(WiFi.localIP().toString().c_str())));
+        }
+
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 4: Starting server with server_->begin()..."));
+        server_->begin();
+        running_ = true;
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server started. Running: " + StdString(running_ ? "true" : "false")));
+
+        if (WiFi.status() == WL_CONNECTED) {
+            ipAddress_ = StdString(WiFi.localIP().toString().c_str());
+            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server IP address: " + ipAddress_));
+        } else {
+            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi not connected, IP address not set"));
+        }
+
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() completed successfully"));
         return true;
     }
 

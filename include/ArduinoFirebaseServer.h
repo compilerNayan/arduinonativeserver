@@ -4,6 +4,7 @@
 #include "IServer.h"
 #include "IHttpRequest.h"
 #include <IArduinoRemoteStorage.h>
+#include <ILogger.h>
 #include <Arduino.h>
 
 /**
@@ -26,6 +27,8 @@ class ArduinoFirebaseServer : public IServer {
 
     /* @Autowired */
     Private IArduinoRemoteStoragePtr remoteStorage;
+    /* @Autowired */
+    Private ILoggerPtr logger;
 
     Private Static StdString GenerateGuid() {
         StdString guid;
@@ -104,7 +107,7 @@ class ArduinoFirebaseServer : public IServer {
         (void)requestId;
         (void)message;
         if (!running_) {
-            Serial.println("[ArduinoFirebaseServer] SendMessage: server not running");
+            logger->Warning(Tag::Untagged, StdString("[ArduinoFirebaseServer] SendMessage: server not running"));
             return false;
         }
         sentMessageCount_++;
