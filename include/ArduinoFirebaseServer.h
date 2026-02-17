@@ -77,7 +77,15 @@ class ArduinoFirebaseServer : public IServer {
         if (!remoteStorage) {
             return nullptr;
         }
-        StdString value = remoteStorage->GetCommand();
+        StdString firstPair = remoteStorage->GetCommand();
+        if (firstPair.empty()) {
+            return nullptr;
+        }
+
+        Size colonPos = firstPair.find(':');
+        StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
+            ? firstPair.substr(colonPos + 1)
+            : firstPair;
         if (value.empty()) {
             return nullptr;
         }
