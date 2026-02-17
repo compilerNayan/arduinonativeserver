@@ -5,6 +5,7 @@
 #include "IHttpRequest.h"
 #include "firebase/IFirebaseRequestManager.h"
 #include "INetworkStatusProvider.h"
+#include <IArduinoRemoteStorage.h>
 #include <Arduino.h>
 
 /**
@@ -27,6 +28,8 @@ class ArduinoFirebaseServer : public IServer {
 
     /* @Autowired */
     Private IFirebaseRequestManagerPtr firebaseRequestManager;
+    /* @Autowired */
+    Private IArduinoRemoteStoragePtr remoteStorage;
     /* @Autowired */
     Private INetworkStatusProviderPtr networkStatusProvider_;
     Private Int storedWifiConnectionId_;
@@ -112,23 +115,14 @@ class ArduinoFirebaseServer : public IServer {
         if (!EnsureNetworkAndFirebaseMatch()) {
             return nullptr;
         }
-        if (!firebaseRequestManager) {
+        if (!remoteStorage) {
             return nullptr;
         }
 
-        StdString firstPair = firebaseRequestManager->RetrieveRequest();
-        if (firstPair.empty()) {
-            return nullptr;
-        }
-
-        Size colonPos = firstPair.find(':');
-        StdString value = (colonPos != StdString::npos && colonPos + 1 < firstPair.size())
-            ? firstPair.substr(colonPos + 1)
-            : firstPair;
+        StdString value = remoteStorage->GetCommand();
         if (value.empty()) {
             return nullptr;
         }
-
 
         StdString requestId = "ignore";
         receivedMessageCount_++;
