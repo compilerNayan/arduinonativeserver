@@ -80,7 +80,8 @@ class ArduinoFirebaseServer : public IServer {
         if (!remoteStorage) {
             return nullptr;
         }
-        StdString firstPair = remoteStorage->GetCommand();
+        StdString firstPair;
+        remoteStorage->GetCommand(firstPair);
         if (firstPair.empty()) {
             return nullptr;
         }
