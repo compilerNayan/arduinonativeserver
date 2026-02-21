@@ -3,7 +3,6 @@
 
 #include "IServer.h"
 #include "IHttpRequest.h"
-#include <INetworkStatusProvider.h>
 #include <ILogger.h>
 #include <WiFiServer.h>
 #include <WiFiClient.h>
@@ -41,33 +40,8 @@ class HttpTcpArduinoServer : public IServer {
     Private StdMap<StdString, SenderDetails> requestSenderMap_;
 
     /* @Autowired */
-    Private INetworkStatusProviderPtr networkStatusProvider_;
-    /* @Autowired */
     Private ILoggerPtr logger;
-    Private Int storedWifiConnectionId_;
 
-    /**
-     * Ensures WiFi is connected and server is bound to the current WiFi connection id.
-     * If no provider is set, returns true (proceed). If WiFi is disconnected, stops server and returns false.
-     * If WiFi is connected but connection id changed, restarts server and updates stored id, then returns true.
-     * Call before ReceiveMessage or SendMessage; if false, do not proceed.
-     */
-    Private Bool EnsureWifiAndServerMatch() {
-        if (networkStatusProvider_ == nullptr) {
-            return true;
-        }
-        if (!networkStatusProvider_->IsWiFiConnected()) {
-            Stop();
-            return false;
-        }
-        Int currentId = networkStatusProvider_->GetWifiConnectionId();
-        if (currentId != storedWifiConnectionId_) {
-            Stop();
-            Start(port_);
-            storedWifiConnectionId_ = currentId;
-        }
-        return true;
-    }
 
     Private StdString GenerateGuid() {
         // Simple GUID generation for Arduino using random()
@@ -207,16 +181,14 @@ class HttpTcpArduinoServer : public IServer {
         : port_(DEFAULT_SERVER_PORT), server_(nullptr), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000),
-          storedWifiConnectionId_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000) {
     }
 
     Public HttpTcpArduinoServer(CUInt port) 
         : port_(port), server_(nullptr), running_(false),
           ipAddress_("0.0.0.0"), lastClientIp_(""), lastClientPort_(0),
           receivedMessageCount_(0), sentMessageCount_(0),
-          maxMessageSize_(8192), receiveTimeout_(5000),
-          storedWifiConnectionId_(0) {
+          maxMessageSize_(8192), receiveTimeout_(5000) {
     }
 
     Public Virtual ~HttpTcpArduinoServer() {
@@ -226,13 +198,6 @@ class HttpTcpArduinoServer : public IServer {
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
         logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() called with port: " + std::to_string(port)));
 
-        if (networkStatusProvider_ != nullptr && !networkStatusProvider_->IsWiFiConnected()) {
-            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: WiFi is not connected. Start aborted."));
-            return false;
-        }
-        if (networkStatusProvider_ != nullptr) {
-            storedWifiConnectionId_ = networkStatusProvider_->GetWifiConnectionId();
-        }
         Stop();
 
         if (running_) {
@@ -314,9 +279,6 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        if (!EnsureWifiAndServerMatch()) {
-            return nullptr;
-        }
         if (!running_ || server_ == nullptr) {
             return nullptr;
         }
@@ -371,9 +333,6 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
-        if (!EnsureWifiAndServerMatch()) {
-            return false;
-        }
         if (!running_ || server_ == nullptr) {
             return false;
         }
