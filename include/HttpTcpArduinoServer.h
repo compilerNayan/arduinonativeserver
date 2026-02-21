@@ -223,26 +223,10 @@ class HttpTcpArduinoServer : public IServer {
         }
         logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFiServer instance created successfully"));
 
-        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 3: Checking WiFi status..."));
-        wl_status_t wifiStatus = WiFi.status();
-        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi status: " + std::to_string(wifiStatus)));
-        if (wifiStatus != WL_CONNECTED) {
-            logger->Warning(Tag::Untagged, StdString("[HttpTcpArduinoServer] WARNING: WiFi is not connected (status: " + std::to_string(wifiStatus) + "). Server may not work properly."));
-        } else {
-            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi is connected. Local IP: " + StdString(WiFi.localIP().toString().c_str())));
-        }
-
-        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 4: Starting server with server_->begin()..."));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 3: Starting server with server_->begin()..."));
         server_->begin();
         running_ = true;
         logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server started. Running: " + StdString(running_ ? "true" : "false")));
-
-        if (WiFi.status() == WL_CONNECTED) {
-            ipAddress_ = StdString(WiFi.localIP().toString().c_str());
-            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server IP address: " + ipAddress_));
-        } else {
-            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFi not connected, IP address not set"));
-        }
 
         logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() completed successfully"));
         return true;
