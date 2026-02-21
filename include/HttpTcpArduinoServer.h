@@ -39,8 +39,8 @@ class HttpTcpArduinoServer : public IServer {
     Private UInt receiveTimeout_;
     Private StdMap<StdString, SenderDetails> requestSenderMap_;
 
-    ///* -- @Autowired */
-    //Private ILoggerPtr logger;
+    /* @Autowired */
+    Private ILoggerPtr logger;
 
 
     Private StdString GenerateGuid() {
@@ -196,39 +196,39 @@ class HttpTcpArduinoServer : public IServer {
     }
 
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() called with port: " + std::to_string(port)));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() called with port: " + std::to_string(port)));
 
         Stop();
 
         if (running_) {
-            //logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Server is already running!"));
+            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Server is already running!"));
             return false;
         }
 
         port_ = port;
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Port set to: " + std::to_string(port_)));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Port set to: " + std::to_string(port_)));
 
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 1: Cleaning up existing server instance..."));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 1: Cleaning up existing server instance..."));
         if (server_ != nullptr) {
             delete server_;
             server_ = nullptr;
-            //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Old server instance deleted"));
+            logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Old server instance deleted"));
         }
 
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 2: Creating new WiFiServer instance..."));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 2: Creating new WiFiServer instance..."));
         server_ = new WiFiServer(static_cast<uint16_t>(port_));
         if (server_ == nullptr) {
-            //logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Failed to allocate memory for WiFiServer!"));
+            logger->Error(Tag::Untagged, StdString("[HttpTcpArduinoServer] ERROR: Failed to allocate memory for WiFiServer!"));
             return false;
         }
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFiServer instance created successfully"));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] WiFiServer instance created successfully"));
 
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 3: Starting server with server_->begin()..."));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Step 3: Starting server with server_->begin()..."));
         server_->begin();
         running_ = true;
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server started. Running: " + StdString(running_ ? "true" : "false")));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Server started. Running: " + StdString(running_ ? "true" : "false")));
 
-        //logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() completed successfully"));
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Start() completed successfully"));
         return true;
     }
 
