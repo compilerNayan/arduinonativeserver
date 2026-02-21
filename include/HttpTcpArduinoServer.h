@@ -310,6 +310,8 @@ class HttpTcpArduinoServer : public IServer {
         requestSenderMap_[requestId] = senderDetails;
         
         receivedMessageCount_++;
+
+        Serial.println("Received message: ");
         
         // Parse and return IHttpRequest with request ID
         // NOTE: Do NOT close client here - it's stored in the map for SendMessage()
