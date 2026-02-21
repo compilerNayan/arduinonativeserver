@@ -3,7 +3,7 @@
 
 #include "IServer.h"
 #include "IHttpRequest.h"
-#include <IArduinoRemoteStorage.h>
+//#include <IArduinoRemoteStorage.h>
 #include <ILogger.h>
 #include <Arduino.h>
 
@@ -26,7 +26,7 @@ class ArduinoFirebaseServer : public IServer {
     Private UInt receiveTimeout_;
 
     /* @Autowired */
-    Private IArduinoRemoteStoragePtr remoteStorage;
+    //Private IArduinoRemoteStoragePtr remoteStorage;
     /* @Autowired */
     Private ILoggerPtr logger;
 
@@ -77,11 +77,11 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        if (!remoteStorage) {
-            return nullptr;
-        }
+        //if (!remoteStorage) {
+        //    return nullptr;
+        //}
         StdString firstPair;
-        remoteStorage->GetCommand(firstPair);
+        //remoteStorage->GetCommand(firstPair);
         if (firstPair.empty()) {
             return nullptr;
         }
