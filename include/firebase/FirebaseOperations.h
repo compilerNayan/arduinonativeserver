@@ -3,7 +3,6 @@
 #define FIREBASEOPERATIONS_H
 
 #include "IFirebaseOperations.h"
-#include <INetworkStatusProvider.h>
 #include <ILogger.h>
 #include <IDeviceDetails.h>
 
@@ -17,8 +16,6 @@
 #include <ctime>
 
 class FirebaseOperations : public IFirebaseOperations {
-    /* @Autowired */
-    Private INetworkStatusProviderPtr networkStatusProvider_;
     /* @Autowired */
     Private ILoggerPtr logger;
     /* @Autowired */
@@ -109,34 +106,10 @@ class FirebaseOperations : public IFirebaseOperations {
         dirty_.store(true);
     }
 
-    Private Bool EnsureNetworkAndFirebaseMatch() {
-        if (!networkStatusProvider_) {
-            dirty_.store(true);
-            return false;
-        }
-        if (!networkStatusProvider_->IsWiFiConnected()) {
-            dirty_.store(true);
-            return false;
-        }
-        if (!networkStatusProvider_->IsInternetConnected()) {
-            dirty_.store(true);
-            return false;
-        }
-        Int currentId = networkStatusProvider_->GetWifiConnectionId();
-        if (currentId != storedWifiConnectionId_) {
-            if (storedWifiConnectionId_ != 0) {
-                logger->Info(Tag::Untagged, StdString("[FirebaseOperations] WiFi connection id changed (" + std::to_string(storedWifiConnectionId_) + " -> " + std::to_string(currentId) + "); refreshing Firebase connection"));
-                dirty_.store(true);
-            }
-            storedWifiConnectionId_ = currentId;
-        }
-        return true;
-    }
 
     /** Returns false if dirty, network/Firebase mismatch, or Firebase not ready. Otherwise ensures Firebase begun and returns true. */
     Private Bool EnsureReady() {
         if (dirty_.load(std::memory_order_relaxed)) return false;
-        if (!EnsureNetworkAndFirebaseMatch()) return false;
         EnsureFirebaseBegin();
         if (!Firebase.ready()) {
             dirty_.store(true);
