@@ -12,11 +12,11 @@ class IFirebaseFacade {
     /** Fills @param out with the next command to execute. Returns operation result. */
     Public Virtual FirebaseOperationResult GetCommand(StdString& out) = 0;
 
-    Public Void ResetFirebaseOperations() = 0;
+    Public Virtual Void ResetFirebaseOperations() = 0;
 
-    Public Void StopFirebaseOperations() = 0;
+    Public Virtual Void StopFirebaseOperations() = 0;
 
-    Public Void StartFirebaseOperations() = 0;
+    Public Virtual Void StartFirebaseOperations() = 0;
 };
 
 #endif /* IFIREBASEFACADE_H */
