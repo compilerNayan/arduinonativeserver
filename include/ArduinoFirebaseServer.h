@@ -105,7 +105,7 @@ class ArduinoFirebaseServer : public IServer {
         receivedMessageCount_++;
 
         IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, RequestSource::CloudServer, value);
-        logger->Info(Tag::Untagged, StdString("[ArduinoFirebaseServer] Received message");
+        logger->Info(Tag::Untagged, StdString("[ArduinoFirebaseServer] Received message"));
         if (!req) {
             logger->Error(Tag::Untagged, StdString("[ArduinoFirebaseServer] Failed to create request"));
             return nullptr;
