@@ -16,7 +16,7 @@
 class FirebaseFacade : public IFirebaseFacade {
 
     Private IFirebaseOperationsPtr firebaseOperations;
-    Private std::mutex firebaseOperationsMutex_;
+    Private mutable std::mutex firebaseOperationsMutex_;
 
     /* @Autowired */
     Private ILoggerPtr logger;
@@ -65,6 +65,11 @@ class FirebaseFacade : public IFirebaseFacade {
         logger->Info(Tag::Untagged, StdString("[FirebaseFacade] Starting Firebase operations."));
         std::lock_guard<std::mutex> lock(firebaseOperationsMutex_);
         firebaseOperations = std::make_shared<FirebaseOperations>();
+    }
+
+    Public Bool IsDirty() const override {
+        std::lock_guard<std::mutex> lock(firebaseOperationsMutex_);
+        return firebaseOperations ? firebaseOperations->IsDirty() : false;
     }
 
     Public FirebaseOperationResult PublishLogs(const StdMap<ULongLong, StdString>& logs) override {

@@ -20,6 +20,9 @@ class IFirebaseFacade {
     Public Virtual Void StopFirebaseOperations() = 0;
 
     Public Virtual Void StartFirebaseOperations() = 0;
+
+    /** Returns true if the underlying Firebase operations instance is dirty (e.g. after an error). */
+    Public Virtual Bool IsDirty() const = 0;
 };
 
 #endif /* IFIREBASEFACADE_H */
