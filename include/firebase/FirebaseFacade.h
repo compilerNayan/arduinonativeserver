@@ -67,6 +67,17 @@ class FirebaseFacade : public IFirebaseFacade {
         firebaseOperations = std::make_shared<FirebaseOperations>();
     }
 
+    Public FirebaseOperationResult PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
+        IFirebaseOperationsPtr ops;
+        {
+            std::lock_guard<std::mutex> lock(firebaseOperationsMutex_);
+            ops = firebaseOperations;
+        }
+        if (!ops) return FirebaseOperationResult::NotReady;
+        if (ops->IsDirty()) return FirebaseOperationResult::NotReady;
+        if (ops->IsOperationInProgress()) return FirebaseOperationResult::AnotherOperationInProgress;
+        return ops->PublishLogs(logs);
+    }
 
     Public FirebaseOperationResult GetCommand(StdString& out) override {
         out.clear();

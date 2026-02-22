@@ -12,6 +12,9 @@ class IFirebaseFacade {
     /** Fills @param out with the next command to execute. Returns operation result. */
     Public Virtual FirebaseOperationResult GetCommand(StdString& out) = 0;
 
+    /** Publish logs to Firebase. Returns operation result. */
+    Public Virtual FirebaseOperationResult PublishLogs(const StdMap<ULongLong, StdString>& logs) = 0;
+
     Public Virtual Void ResetFirebaseOperations() = 0;
 
     Public Virtual Void StopFirebaseOperations() = 0;
