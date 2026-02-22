@@ -3,9 +3,10 @@
 
 #include "IServer.h"
 #include "IHttpRequest.h"
-//#include <IArduinoRemoteStorage.h>
 #include <ILogger.h>
 #include <Arduino.h>
+
+#include "firebase/IFirebaseFacade.h"
 
 /**
  * Firebase-style server implementation of IServer interface.
@@ -26,7 +27,8 @@ class ArduinoFirebaseServer : public IServer {
     Private UInt receiveTimeout_;
 
     /* @Autowired */
-    //Private IArduinoRemoteStoragePtr remoteStorage;
+    Private IFirebaseFacadePtr firebaseFacade;
+    
     /* @Autowired */
     Private ILoggerPtr logger;
 
@@ -57,11 +59,13 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
         port_ = port;
         running_ = true;
+        firebaseFacade->StartFirebaseOperations();
         return true;
     }
 
     Public Virtual Void Stop() override {
         running_ = false;
+        firebaseFacade->StopFirebaseOperations();
     }
 
     Public Virtual StdString GetIpAddress() const override {
@@ -77,11 +81,14 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        //if (!remoteStorage) {
-        //    return nullptr;
-        //}
+        if (!firebaseFacade) {
+            return nullptr;
+        }
         StdString firstPair;
-        //remoteStorage->GetCommand(firstPair);
+        FirebaseOperationResult result = firebaseFacade->GetCommand(firstPair);
+        if (result != FirebaseOperationResult::OperationSucceeded) {
+            return nullptr;
+        }
         if (firstPair.empty()) {
             return nullptr;
         }
@@ -94,11 +101,13 @@ class ArduinoFirebaseServer : public IServer {
             return nullptr;
         }
 
-        StdString requestId = "ignore";
+        StdString requestId = GenerateGuid();
         receivedMessageCount_++;
 
         IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, RequestSource::CloudServer, value);
+        logger->Info(Tag::Untagged, StdString("[ArduinoFirebaseServer] Received message");
         if (!req) {
+            logger->Error(Tag::Untagged, StdString("[ArduinoFirebaseServer] Failed to create request"));
             return nullptr;
         }
         return req;
