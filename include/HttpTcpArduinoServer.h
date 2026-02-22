@@ -315,7 +315,7 @@ class HttpTcpArduinoServer : public IServer {
         
         // Parse and return IHttpRequest with request ID
         // NOTE: Do NOT close client here - it's stored in the map for SendMessage()
-        return IHttpRequest::GetRequest(requestId, fullRequest);
+        return IHttpRequest::GetRequest(requestId, RequestSource::LocalServer, fullRequest);
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {

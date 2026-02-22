@@ -97,7 +97,7 @@ class ArduinoFirebaseServer : public IServer {
         StdString requestId = "ignore";
         receivedMessageCount_++;
 
-        IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, value);
+        IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, RequestSource::CloudServer, value);
         if (!req) {
             return nullptr;
         }
