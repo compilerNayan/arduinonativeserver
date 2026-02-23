@@ -118,8 +118,19 @@ class FirebaseOperations : public IFirebaseOperations {
         return true;
     }
 
-    /** Convert key (UTC ms or sec*1000+seq) to Firebase-safe key in local time "2026-02-17T18-30-00_123" (no Z; TZ set by DeviceTimeSyncNtp). */
+    /** Convert key (UTC ms or sec*1000+seq) to Firebase-safe key in local time "2026-02-17T18-30-00_123" (no Z; TZ set by DeviceTimeSyncNtp). When NTP not synced, format as "1970-01-01T00-29-12_041" using value as sec since epoch. */
     Private StdString MillisToIso8601(ULongLong timestampMs) {
+        auto FormatAsTime = [](ULongLong ms) -> StdString {
+            time_t sec = static_cast<time_t>(ms / 1000);
+            unsigned int subMs = static_cast<unsigned int>(ms % 1000);
+            struct tm* t = localtime(&sec);
+            if (!t) return "millis_" + std::to_string((unsigned long long)ms);
+            char buf[32];
+            if (strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", t) == 0) return "millis_" + std::to_string((unsigned long long)ms);
+            char out[40];
+            snprintf(out, sizeof(out), "%s_%03u", buf, subMs);
+            return StdString(out);
+        };
         ULongLong utcMs;
         if (timestampMs >= 1000000000000ULL) {
             utcMs = timestampMs;
@@ -129,7 +140,7 @@ class FirebaseOperations : public IFirebaseOperations {
                 if (now >= 978307200) {
                     epochOffsetMs_ = (ULongLong)now * 1000ULL - (ULongLong)millis();
                 } else {
-                    return "millis_" + std::to_string((unsigned long long)timestampMs);
+                    return FormatAsTime(timestampMs);
                 }
             }
             utcMs = epochOffsetMs_ + timestampMs;
@@ -137,10 +148,10 @@ class FirebaseOperations : public IFirebaseOperations {
         time_t sec = static_cast<time_t>(utcMs / 1000);
         unsigned int ms = static_cast<unsigned int>(utcMs % 1000);
         struct tm* t = localtime(&sec);
-        if (!t) return "millis_" + std::to_string((unsigned long long)timestampMs);
+        if (!t) return FormatAsTime(utcMs);
         char buf[32];
         size_t n = strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", t);
-        if (n == 0) return "millis_" + std::to_string((unsigned long long)timestampMs);
+        if (n == 0) return FormatAsTime(utcMs);
         char out[40];
         snprintf(out, sizeof(out), "%s_%03u", buf, ms);
         return StdString(out);
