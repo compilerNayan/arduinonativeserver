@@ -13,6 +13,7 @@
 #include <mutex>
 
 /* @Component */
+/* @Scope("PROTOTYPE") */
 class FirebaseFacade : public IFirebaseFacade {
 
     Private IFirebaseOperationsPtr firebaseOperations;
