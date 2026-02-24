@@ -312,7 +312,7 @@ class HttpTcpArduinoServer : public IServer {
         receivedMessageCount_++;
 
         Serial.println("Received message: ");
-        Serial.println(fullRequest.c_str());
+        logger->Info(Tag::Untagged, StdString("[HttpTcpArduinoServer] Received message: ") + fullRequest);
         
         // Parse and return IHttpRequest with request ID
         // NOTE: Do NOT close client here - it's stored in the map for SendMessage()
