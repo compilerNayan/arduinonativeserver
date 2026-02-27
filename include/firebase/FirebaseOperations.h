@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <ctime>
+#include <set>
 
 class FirebaseOperations : public IFirebaseOperations {
     /* @Autowired */
@@ -38,6 +39,8 @@ class FirebaseOperations : public IFirebaseOperations {
     Private Static const char* kLegacyToken() { return "Aj54Sf7eKxCaMIgTgEX4YotS8wbVpzmspnvK6X2C"; }
     Private Static const unsigned long kDeleteIntervalMs = 60000;
     Private unsigned long lastDeleteMillis_ = 0;
+    /** Keys we have already processed; duplicate keys are ignored. Cleared when we delete the commands node. */
+    Private std::set<StdString> seenCommandKeys_;
 
     Private StdString GetCommandsPath() const {
         return "/" + deviceDetails_->GetSerialNumber() + "/commands";
@@ -157,28 +160,26 @@ class FirebaseOperations : public IFirebaseOperations {
         return StdString(out);
     }
 
-    /** Returns all key:value pairs from one stream read. No queue; returns full list. Call only while operationInProgress_ is held. */
+    /** Returns all key:value pairs from one read. Uses GET (not stream) so the device
+     *  sees commands regardless of who wrote them. Call only while operationInProgress_ is held. */
     Private StdVector<StdString> RetrieveCommandsFromFirebase() {
         StdVector<StdString> emptyResult;
+        EnsureFirebaseBegin();
+        StdString cmdPath = GetCommandsPath();
 
-        if (!EnsureStreamBegin()) {
-            OnErrorAndScheduleRefresh("beginStream failed");
-            return emptyResult;
-        }
-
-        if (!Firebase.RTDB.readStream(&fbdo)) {
+        if (!Firebase.RTDB.get(&fbdo, cmdPath.c_str())) {
             OnErrorAndScheduleRefresh(fbdo.errorReason().c_str());
             return emptyResult;
         }
 
-        if (!fbdo.streamAvailable()) {
+        if (fbdo.dataType() == "null" || !fbdo.dataAvailable()) {
             unsigned long now = millis();
             if (now - lastDeleteMillis_ >= kDeleteIntervalMs) {
-                StdString cmdPath = GetCommandsPath();
                 if (!Firebase.RTDB.deleteNode(&fbdoDel, cmdPath.c_str())) {
                     OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
                 } else {
                     lastDeleteMillis_ = now;
+                    seenCommandKeys_.clear();
                 }
             }
             return emptyResult;
@@ -191,17 +192,27 @@ class FirebaseOperations : public IFirebaseOperations {
         StdList<StdString> keysReceived;
         ParseJsonToKeyValuePairs(payload, result, keysReceived);
 
+        StdVector<StdString> out;
+        auto keyIt = keysReceived.begin();
+        auto resultIt = result.begin();
+        for (; keyIt != keysReceived.end() && resultIt != result.end(); ++keyIt, ++resultIt) {
+            const StdString& key = *keyIt;
+            if (seenCommandKeys_.find(key) != seenCommandKeys_.end())
+                continue;
+            seenCommandKeys_.insert(key);
+            out.push_back(*resultIt);
+        }
+
         unsigned long now = millis();
         if (now - lastDeleteMillis_ >= kDeleteIntervalMs) {
-            StdString cmdPath = GetCommandsPath();
             if (!Firebase.RTDB.deleteNode(&fbdoDel, cmdPath.c_str())) {
                 OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
             } else {
                 lastDeleteMillis_ = now;
+                seenCommandKeys_.clear();
             }
         }
 
-        StdVector<StdString> out(result.begin(), result.end());
         return out;
     }
 
