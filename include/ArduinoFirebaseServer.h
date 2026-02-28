@@ -6,7 +6,7 @@
 #include <ILogger.h>
 #include <Arduino.h>
 
-#include "firebase/IFirebaseFacade.h"
+#include "cloud/ICloudFacade.h"
 
 /**
  * Firebase-style server implementation of IServer interface.
@@ -27,7 +27,7 @@ class ArduinoFirebaseServer : public IServer {
     Private UInt receiveTimeout_;
 
     /* @Autowired */
-    Private IFirebaseFacadePtr firebaseFacade;
+    Private ICloudFacadePtr cloudFacade;
     
     /* @Autowired */
     Private ILoggerPtr logger;
@@ -59,13 +59,13 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
         port_ = port;
         running_ = true;
-        firebaseFacade->StartFirebaseOperations();
+        cloudFacade->StartCloudOperations();
         return true;
     }
 
     Public Virtual Void Stop() override {
         running_ = false;
-        firebaseFacade->StopFirebaseOperations();
+        cloudFacade->StopCloudOperations();
     }
 
     Public Virtual StdString GetIpAddress() const override {
@@ -81,14 +81,10 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
-        if (!firebaseFacade) {
+        if (!cloudFacade) {
             return nullptr;
         }
-        StdString firstPair;
-        FirebaseOperationResult result = firebaseFacade->GetCommand(firstPair);
-        if (result != FirebaseOperationResult::OperationSucceeded) {
-            return nullptr;
-        }
+        StdString firstPair = cloudFacade->GetCommand();
         if (firstPair.empty()) {
             return nullptr;
         }
