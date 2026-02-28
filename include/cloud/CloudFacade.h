@@ -79,7 +79,7 @@ class CloudFacade : public ICloudFacade {
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
         if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
-            if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: network not connected"));
+            //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: network not connected"));
             return false;
         }
         ICloudOperationsPtr ops;
@@ -111,7 +111,7 @@ class CloudFacade : public ICloudFacade {
             return out;
         }
         if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
-            if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: network not connected"));
+            //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: network not connected"));
             return StdString();
         }
         ICloudOperationsPtr ops;
