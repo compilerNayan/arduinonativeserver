@@ -3,16 +3,20 @@
 
 #include "IAwsCloudConfigProvider.h"
 #include <StandardDefines.h>
+#include <IDeviceDetails.h>
 
-/** Hardcoded AWS IoT config (endpoint, thing name, device serial NDDC, certs from secrets). */
+/** Hardcoded AWS IoT config (endpoint, thing name, certs from secrets). Device serial from IDeviceDetails. */
 /* @Component */
 class AwsCloudConfigProvider : public IAwsCloudConfigProvider {
     Public AwsCloudConfigProvider() = default;
     Public Virtual ~AwsCloudConfigProvider() override = default;
 
+    /* @Autowired */
+    Private IDeviceDetailsPtr deviceDetails_;
+
     Public Virtual StdString GetEndpoint() const override { return "a2hlcpmplecdfa-ats.iot.us-east-1.amazonaws.com"; }
     Public Virtual StdString GetThingName() const override { return "nayanesp32"; }
-    Public Virtual StdString GetDeviceSerial() const override { return "NDDC"; }
+    Public Virtual StdString GetDeviceSerial() const override { return deviceDetails_->GetSerialNumber(); }
     Public Virtual StdString GetCaCert() const override {
         return R"EOF(
 -----BEGIN CERTIFICATE-----
