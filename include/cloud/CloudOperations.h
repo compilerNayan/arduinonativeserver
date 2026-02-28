@@ -8,16 +8,27 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <ILogger.h>
 #include <atomic>
 
 class CloudOperations : public ICloudOperations {
     Public CloudOperations() : client_(net_) {}
 
     Public StdVector<StdString> RetrieveCommands() override {
-        if (dirty_.load(std::memory_order_relaxed)) return {};
-        if (operationInProgress_.exchange(true)) return {};
+        if (dirty_.load(std::memory_order_relaxed)) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands skip: dirty"));
+            return {};
+        }
+        if (operationInProgress_.exchange(true)) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands skip: operation already in progress"));
+            return {};
+        }
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
-        if (!EnsureConnected()) return {};
+        if (!EnsureConnected()) {
+            if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: EnsureConnected failed"));
+            return {};
+        }
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: waiting for commands on ") + GetCmdTopic());
         pendingCommands_.clear();
         commandsDone_.store(false);
         const unsigned long timeoutMs = 15000;
@@ -28,15 +39,26 @@ class CloudOperations : public ICloudOperations {
         }
         StdVector<StdString> out(pendingCommands_.begin(), pendingCommands_.end());
         pendingCommands_.clear();
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: got ") + std::to_string(out.size()) + " command(s)");
         return out;
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
-        if (dirty_.load(std::memory_order_relaxed)) return false;
-        if (operationInProgress_.exchange(true)) return false;
+        if (dirty_.load(std::memory_order_relaxed)) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: dirty"));
+            return false;
+        }
+        if (operationInProgress_.exchange(true)) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: operation already in progress"));
+            return false;
+        }
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
-        if (!EnsureConnected()) return false;
+        if (!EnsureConnected()) {
+            if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: EnsureConnected failed"));
+            return false;
+        }
         if (logs.empty()) return true;
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: publishing ") + std::to_string(logs.size()) + " log(s) to " + GetLogsTopic());
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
         for (const auto& p : logs) {
@@ -44,9 +66,13 @@ class CloudOperations : public ICloudOperations {
         }
         char buf[1024];
         size_t n = serializeJson(doc, buf, sizeof(buf));
-        if (n >= sizeof(buf)) return false;
+        if (n >= sizeof(buf)) {
+            if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: serialized payload too large"));
+            return false;
+        }
         Bool ok = client_.publish(GetLogsTopic().c_str(), buf);
         client_.loop();
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: ") + (ok ? "ok" : "publish failed"));
         return ok;
     }
 
@@ -60,6 +86,8 @@ class CloudOperations : public ICloudOperations {
 
     /* @Autowired */
     Private IAwsCloudConfigProviderPtr configProvider_;
+    /* @Autowired */
+    Private ILoggerPtr logger;
     Private WiFiClientSecure net_;
     Private PubSubClient client_;
     Private std::atomic<bool> connected_{false};
@@ -76,13 +104,17 @@ class CloudOperations : public ICloudOperations {
     }
 
     Private void OnMqttMessage(char* topic, byte* payload, unsigned int length) {
-        (void)topic;
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] MQTT msg topic=") + topic + " len=" + std::to_string(length));
         if (IsDonePayload(reinterpret_cast<const char*>(payload), length)) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] MQTT done payload received"));
             commandsDone_.store(true);
             return;
         }
         StdString cmd = ParseCommandPayload(reinterpret_cast<const char*>(payload), length);
-        if (!cmd.empty()) pendingCommands_.push_back(cmd);
+        if (!cmd.empty()) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] MQTT command: ") + cmd);
+            pendingCommands_.push_back(cmd);
+        }
     }
 
     Private Bool IsDonePayload(const char* payload, unsigned int length) {
@@ -126,6 +158,7 @@ class CloudOperations : public ICloudOperations {
             client_.setServer(configProvider_->GetEndpoint().c_str(), 8883);
             client_.setCallback(MqttCallback);
         }
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] Connecting to ") + configProvider_->GetEndpoint() + " as " + configProvider_->GetThingName());
         net_.setCACert(configProvider_->GetCaCert().c_str());
         net_.setCertificate(configProvider_->GetDeviceCert().c_str());
         net_.setPrivateKey(configProvider_->GetPrivateKey().c_str());
@@ -134,13 +167,16 @@ class CloudOperations : public ICloudOperations {
         unsigned long start = millis();
         while (!client_.connect(configProvider_->GetThingName().c_str())) {
             if (millis() - start > timeoutMs) {
+                if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] MQTT connect timeout"));
                 dirty_.store(true);
                 s_instance = nullptr;
                 return false;
             }
             delay(500);
         }
-        client_.subscribe(GetCmdTopic().c_str());
+        StdString cmdTopic = GetCmdTopic();
+        client_.subscribe(cmdTopic.c_str());
+        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] MQTT connected, subscribed to ") + cmdTopic);
         connected_.store(true);
         return true;
     }
