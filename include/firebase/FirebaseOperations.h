@@ -203,7 +203,7 @@ class FirebaseOperations : public IFirebaseOperations {
             out.push_back(*resultIt);
         }
 
-        unsigned long now = millis();
+        /* unsigned long now = millis();
         if (now - lastDeleteMillis_ >= kDeleteIntervalMs) {
             if (!Firebase.RTDB.deleteNode(&fbdoDel, cmdPath.c_str())) {
                 OnErrorAndScheduleRefresh(fbdoDel.errorReason().c_str());
@@ -211,7 +211,7 @@ class FirebaseOperations : public IFirebaseOperations {
                 lastDeleteMillis_ = now;
                 seenCommandKeys_.clear();
             }
-        }
+        } */  
 
         return out;
     }
