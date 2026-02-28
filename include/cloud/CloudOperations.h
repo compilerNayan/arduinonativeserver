@@ -10,7 +10,6 @@
 #include <ArduinoJson.h>
 #include <atomic>
 
-/* @Component */
 class CloudOperations : public ICloudOperations {
     Public CloudOperations() : client_(net_) {}
 

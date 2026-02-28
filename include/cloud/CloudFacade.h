@@ -4,6 +4,7 @@
 
 #include "ICloudFacade.h"
 #include "ICloudOperations.h"
+#include "CloudOperations.h"
 #include <ILogger.h>
 #include <INetworkStatusProvider.h>
 #include <Arduino.h>
@@ -15,11 +16,7 @@
 /* @Scope("PROTOTYPE") */
 class CloudFacade : public ICloudFacade {
 
-    /* @Autowired */
     Private ICloudOperationsPtr cloudOperations_;
-
-    /** Active reference: same as cloudOperations_ when started, nullptr when stopped. */
-    Private ICloudOperationsPtr currentOps_;
     Private mutable std::mutex cloudOperationsMutex_;
 
     /* @Autowired */
@@ -52,11 +49,11 @@ class CloudFacade : public ICloudFacade {
 
     Public Virtual ~CloudFacade() override = default;
 
-    /** Thread-safe: clears command queue and re-enables the autowired cloud operations. */
+    /** Thread-safe: replaces cloudOperations_ with a new CloudOperations instance and clears command queue. */
     Public Void ResetCloudOperations() override {
         logger->Info(Tag::Untagged, StdString("[CloudFacade] Resetting cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-        currentOps_ = cloudOperations_;
+        cloudOperations_ = std::make_shared<CloudOperations>();
         {
             std::lock_guard<std::mutex> q(requestQueueMutex_);
             while (!requestQueue_.empty()) requestQueue_.pop();
@@ -66,18 +63,18 @@ class CloudFacade : public ICloudFacade {
     Public Void StopCloudOperations() override {
         logger->Info(Tag::Untagged, StdString("[CloudFacade] Stopping cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-        currentOps_ = nullptr;
+        cloudOperations_ = nullptr;
     }
 
     Public Void StartCloudOperations() override {
         logger->Info(Tag::Untagged, StdString("[CloudFacade] Starting cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-        currentOps_ = cloudOperations_;
+        cloudOperations_ = std::make_shared<CloudOperations>();
     }
 
     Public Bool IsDirty() const override {
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-        return currentOps_ ? currentOps_->IsDirty() : false;
+        return cloudOperations_ ? cloudOperations_->IsDirty() : false;
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
@@ -85,7 +82,7 @@ class CloudFacade : public ICloudFacade {
         ICloudOperationsPtr ops;
         {
             std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-            ops = currentOps_;
+            ops = cloudOperations_;
         }
         if (!ops) return false;
         if (ops->IsDirty()) return false;
@@ -100,7 +97,7 @@ class CloudFacade : public ICloudFacade {
         ICloudOperationsPtr ops;
         {
             std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
-            ops = currentOps_;
+            ops = cloudOperations_;
         }
         if (!ops) return StdString();
         if (ops->IsDirty()) return StdString();
