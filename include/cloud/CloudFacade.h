@@ -51,6 +51,7 @@ class CloudFacade : public ICloudFacade {
 
     /** Thread-safe: replaces cloudOperations_ with a new CloudOperations instance and clears command queue. */
     Public Void ResetCloudOperations() override {
+        Serial.println("[CloudFacade] ResetCloudOperations()");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] Resetting cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
         cloudOperations_ = std::make_shared<CloudOperations>();
@@ -61,12 +62,14 @@ class CloudFacade : public ICloudFacade {
     }
 
     Public Void StopCloudOperations() override {
+        Serial.println("[CloudFacade] StopCloudOperations()");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] Stopping cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
         cloudOperations_ = nullptr;
     }
 
     Public Void StartCloudOperations() override {
+        Serial.println("[CloudFacade] StartCloudOperations()");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] Starting cloud operations."));
         std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
         cloudOperations_ = std::make_shared<CloudOperations>();
@@ -78,7 +81,10 @@ class CloudFacade : public ICloudFacade {
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
+        Serial.print("[CloudFacade] PublishLogs() count=");
+        Serial.println(static_cast<Int>(logs.size()));
         if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
+            Serial.println("[CloudFacade] PublishLogs skip: network not connected");
             //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: network not connected"));
             return false;
         }
@@ -88,29 +94,38 @@ class CloudFacade : public ICloudFacade {
             ops = cloudOperations_;
         }
         if (!ops) {
+            Serial.println("[CloudFacade] PublishLogs skip: no cloud operations");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: no cloud operations"));
             return false;
         }
         if (ops->IsDirty()) {
+            Serial.println("[CloudFacade] PublishLogs skip: operations dirty");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: operations dirty"));
             return false;
         }
         if (ops->IsOperationInProgress()) {
+            Serial.println("[CloudFacade] PublishLogs skip: operation already in progress");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: operation already in progress"));
             return false;
         }
         Bool ok = ops->PublishLogs(logs);
+        Serial.print("[CloudFacade] PublishLogs result -> ");
+        Serial.println(ok ? "OK" : "FAILED");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs ") + (ok ? "ok" : "failed"));
         return ok;
     }
 
     Public StdString GetCommand() override {
+        Serial.println("[CloudFacade] GetCommand() called");
         StdString out;
         if (TryDequeue(out)) {
+            Serial.print("[CloudFacade] GetCommand() from queue -> ");
+            Serial.println(out.c_str());
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: from queue: ") + out);
             return out;
         }
         if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
+            Serial.println("[CloudFacade] GetCommand skip: network not connected");
             //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: network not connected"));
             return StdString();
         }
@@ -120,24 +135,32 @@ class CloudFacade : public ICloudFacade {
             ops = cloudOperations_;
         }
         if (!ops) {
+            Serial.println("[CloudFacade] GetCommand skip: no cloud operations");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: no cloud operations"));
             return StdString();
         }
         if (ops->IsDirty()) {
+            Serial.println("[CloudFacade] GetCommand skip: operations dirty");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: operations dirty"));
             return StdString();
         }
         if (ops->IsOperationInProgress()) {
+            Serial.println("[CloudFacade] GetCommand skip: operation already in progress");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: operation already in progress"));
             return StdString();
         }
         StdVector<StdString> commands = ops->RetrieveCommands();
+        Serial.print("[CloudFacade] RetrieveCommands count=");
+        Serial.println(static_cast<Int>(commands.size()));
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: RetrieveCommands returned ") + std::to_string(commands.size()) + " command(s)");
         EnqueueAll(commands);
         if (TryDequeue(out)) {
+            Serial.print("[CloudFacade] GetCommand returning -> ");
+            Serial.println(out.c_str());
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: returning ") + out);
             return out;
         }
+        Serial.println("[CloudFacade] GetCommand returning empty");
         return StdString();
     }
 };

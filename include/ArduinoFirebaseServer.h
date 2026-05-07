@@ -59,13 +59,19 @@ class ArduinoFirebaseServer : public IServer {
     Public Virtual Bool Start(CUInt port = DEFAULT_SERVER_PORT) override {
         port_ = port;
         running_ = true;
+        Serial.print("[ArduinoFirebaseServer] Start() port=");
+        Serial.println(static_cast<Int>(port_));
+        Serial.println("[ArduinoFirebaseServer] Calling cloudFacade->StartCloudOperations()");
         cloudFacade->StartCloudOperations();
+        Serial.println("[ArduinoFirebaseServer] Start() complete");
         return true;
     }
 
     Public Virtual Void Stop() override {
+        Serial.println("[ArduinoFirebaseServer] Stop() called");
         running_ = false;
         cloudFacade->StopCloudOperations();
+        Serial.println("[ArduinoFirebaseServer] Stop() complete");
     }
 
     Public Virtual StdString GetIpAddress() const override {
@@ -81,10 +87,14 @@ class ArduinoFirebaseServer : public IServer {
     }
 
     Public Virtual IHttpRequestPtr ReceiveMessage() override {
+        Serial.println("[ArduinoFirebaseServer] ReceiveMessage() polling cloudFacade");
         if (!cloudFacade) {
+            Serial.println("[ArduinoFirebaseServer] ReceiveMessage() cloudFacade is null");
             return nullptr;
         }
         StdString firstPair = cloudFacade->GetCommand();
+        Serial.print("[ArduinoFirebaseServer] cloudFacade->GetCommand() returned: ");
+        Serial.println(firstPair.c_str());
         if (firstPair.empty()) {
             return nullptr;
         }
@@ -94,6 +104,7 @@ class ArduinoFirebaseServer : public IServer {
             ? firstPair.substr(colonPos + 1)
             : firstPair;
         if (value.empty()) {
+            Serial.println("[ArduinoFirebaseServer] Parsed value empty, returning nullptr");
             return nullptr;
         }
 
@@ -101,23 +112,35 @@ class ArduinoFirebaseServer : public IServer {
         receivedMessageCount_++;
 
         IHttpRequestPtr req = IHttpRequest::GetRequest(requestId, RequestSource::CloudServer, value);
+        Serial.print("[ArduinoFirebaseServer] Built IHttpRequest body: ");
+        Serial.println(value.c_str());
         logger->Info(Tag::Untagged, StdString("[ArduinoFirebaseServer] Received message"));
         if (!req) {
             logger->Error(Tag::Untagged, StdString("[ArduinoFirebaseServer] Failed to create request"));
+            Serial.println("[ArduinoFirebaseServer] IHttpRequest::GetRequest failed");
             return nullptr;
         }
         return req;
     }
 
     Public Virtual Bool SendMessage(CStdString& requestId, CStdString& message) override {
-        (void)requestId;
-        (void)message;
+        Serial.print("[ArduinoFirebaseServer] SendMessage requestId=");
+        Serial.print(requestId.c_str());
+        Serial.print(" message=");
+        Serial.println(message.c_str());
         if (!running_) {
             logger->Warning(Tag::Untagged, StdString("[ArduinoFirebaseServer] SendMessage: server not running"));
+            Serial.println("[ArduinoFirebaseServer] SendMessage failed: server not running");
             return false;
         }
+        Serial.println("[ArduinoFirebaseServer] Forwarding to cloudFacade->PublishLogs(...)");
+        StdMap<ULongLong, StdString> logs;
+        logs[static_cast<ULongLong>(millis())] = message;
+        Bool published = (cloudFacade != nullptr) ? cloudFacade->PublishLogs(logs) : false;
+        Serial.print("[ArduinoFirebaseServer] cloudFacade->PublishLogs result -> ");
+        Serial.println(published ? "OK" : "FAILED");
         sentMessageCount_++;
-        return true;
+        return published;
     }
 
     Public Virtual StdString GetLastClientIp() const override {

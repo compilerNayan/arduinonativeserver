@@ -60,6 +60,7 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             return true;
         }
         if (configProvider == nullptr) {
+            Serial.println("[AwsIotCoreOperations] EnsureConfigured failed: configProvider is null");
             return false;
         }
 
@@ -81,6 +82,14 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
 
         activeInstance = this;
         configured = true;
+        Serial.print("[AwsIotCoreOperations] Configured endpoint=");
+        Serial.print(endpoint.c_str());
+        Serial.print(" thingName=");
+        Serial.print(thingName.c_str());
+        Serial.print(" publishTopic=");
+        Serial.print(publishTopic.c_str());
+        Serial.print(" subscribeTopic=");
+        Serial.println(subscribeTopic.c_str());
         return true;
     }
 
@@ -89,6 +98,7 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             return false;
         }
         if (WiFi.status() != WL_CONNECTED) {
+            Serial.println("[AwsIotCoreOperations] EnsureMqttConnected: WiFi not connected");
             wasConnected = false;
             return false;
         }
@@ -159,11 +169,19 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
     }
 
     Public Virtual Bool SendMessage(CStdString message, CStdString topicName) override {
+        Serial.print("[AwsIotCoreOperations] SendMessage topic=");
+        Serial.print(topicName.c_str());
+        Serial.print(" payload=");
+        Serial.println(message.c_str());
         if (!EnsureMqttConnected()) {
+            Serial.println("[AwsIotCoreOperations] SendMessage failed: MQTT not connected");
             return false;
         }
         mqttClient.loop();
-        return mqttClient.publish(topicName.c_str(), message.c_str());
+        Bool ok = mqttClient.publish(topicName.c_str(), message.c_str());
+        Serial.print("[AwsIotCoreOperations] mqttClient.publish -> ");
+        Serial.println(ok ? "OK" : "FAILED");
+        return ok;
     }
 
     Public Virtual StdVector<StdString> ReceiveMessages(CStdString topicName) override {
