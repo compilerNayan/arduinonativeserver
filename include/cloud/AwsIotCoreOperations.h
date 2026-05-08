@@ -48,10 +48,10 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
         for (UInt i = 0; i < length; ++i) {
             message += static_cast<Char>(payload[i]);
         }
-        Serial.print("[AwsIotCoreOperations] Callback topic: ");
-        Serial.print(topicName.c_str());
-        Serial.print(" payload: ");
-        Serial.println(message.c_str());
+        ////Serial.print("[AwsIotCoreOperations] Callback topic: ");
+        ////Serial.print(topicName.c_str());
+        ////Serial.print(" payload: ");
+        ////Serial.println(message.c_str());
         bufferedMessages[topicName].push_back(message);
     }
 
@@ -60,7 +60,7 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             return true;
         }
         if (configProvider == nullptr) {
-            Serial.println("[AwsIotCoreOperations] EnsureConfigured failed: configProvider is null");
+            ////Serial.println("[AwsIotCoreOperations] EnsureConfigured failed: configProvider is null");
             return false;
         }
 
@@ -82,14 +82,14 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
 
         activeInstance = this;
         configured = true;
-        Serial.print("[AwsIotCoreOperations] Configured endpoint=");
-        Serial.print(endpoint.c_str());
-        Serial.print(" thingName=");
-        Serial.print(thingName.c_str());
-        Serial.print(" publishTopic=");
-        Serial.print(publishTopic.c_str());
-        Serial.print(" subscribeTopic=");
-        Serial.println(subscribeTopic.c_str());
+        //Serial.print("[AwsIotCoreOperations] Configured endpoint=");
+        //Serial.print(endpoint.c_str());
+        //Serial.print(" thingName=");
+        //Serial.print(thingName.c_str());
+        //Serial.print(" publishTopic=");
+        //Serial.print(publishTopic.c_str());
+        //Serial.print(" subscribeTopic=");
+        //Serial.println(subscribeTopic.c_str());
         return true;
     }
 
@@ -98,7 +98,7 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             return false;
         }
         if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("[AwsIotCoreOperations] EnsureMqttConnected: WiFi not connected");
+            //Serial.println("[AwsIotCoreOperations] EnsureMqttConnected: WiFi not connected");
             wasConnected = false;
             return false;
         }
@@ -118,16 +118,16 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             if (!subscribeTopic.empty()) {
                 if (mqttClient.subscribe(subscribeTopic.c_str())) {
                     subscribedTopics.insert(subscribeTopic);
-                    Serial.print("[AwsIotCoreOperations] Connected + subscribed default topic: ");
-                    Serial.println(subscribeTopic.c_str());
+                    //Serial.print("[AwsIotCoreOperations] Connected + subscribed default topic: ");
+                    //Serial.println(subscribeTopic.c_str());
                 } else {
-                    Serial.print("[AwsIotCoreOperations] Connected but default subscribe failed: ");
-                    Serial.println(subscribeTopic.c_str());
+                    //Serial.print("[AwsIotCoreOperations] Connected but default subscribe failed: ");
+                    //Serial.println(subscribeTopic.c_str());
                 }
             }
         } else {
-            Serial.print("[AwsIotCoreOperations] MQTT connect failed, state: ");
-            Serial.println(mqttClient.state());
+            //Serial.print("[AwsIotCoreOperations] MQTT connect failed, state: ");
+            //Serial.println(mqttClient.state());
             wasConnected = false;
         }
         return connected;
@@ -141,13 +141,13 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
             return true;
         }
         if (mqttClient.subscribe(topicName.c_str())) {
-            Serial.print("[AwsIotCoreOperations] Subscribed to topic: ");
-            Serial.println(topicName.c_str());
+            //Serial.print("[AwsIotCoreOperations] Subscribed to topic: ");
+            //Serial.println(topicName.c_str());
             subscribedTopics.insert(topicName);
             return true;
         }
-        Serial.print("[AwsIotCoreOperations] Subscribe failed for topic: ");
-        Serial.println(topicName.c_str());
+        //Serial.print("[AwsIotCoreOperations] Subscribe failed for topic: ");
+        //Serial.println(topicName.c_str());
         return false;
     }
 
@@ -169,27 +169,27 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
     }
 
     Public Virtual Bool SendMessage(CStdString message, CStdString topicName) override {
-        Serial.print("[AwsIotCoreOperations] SendMessage topic=");
-        Serial.print(topicName.c_str());
-        Serial.print(" payload=");
-        Serial.println(message.c_str());
+        //Serial.print("[AwsIotCoreOperations] SendMessage topic=");
+        //Serial.print(topicName.c_str());
+        //Serial.print(" payload=");
+        //Serial.println(message.c_str());
         if (!EnsureMqttConnected()) {
-            Serial.println("[AwsIotCoreOperations] SendMessage failed: MQTT not connected");
+            //Serial.println("[AwsIotCoreOperations] SendMessage failed: MQTT not connected");
             return false;
         }
         mqttClient.loop();
         Bool ok = mqttClient.publish(topicName.c_str(), message.c_str());
-        Serial.print("[AwsIotCoreOperations] mqttClient.publish -> ");
-        Serial.println(ok ? "OK" : "FAILED");
+        //Serial.print("[AwsIotCoreOperations] mqttClient.publish -> ");
+        //Serial.println(ok ? "OK" : "FAILED");
         return ok;
     }
 
     Public Virtual StdVector<StdString> ReceiveMessages(CStdString topicName) override {
         StdVector<StdString> result;
-        Serial.print("[AwsIotCoreOperations] Receive poll for topic: ");
-        Serial.println(topicName.c_str());
+        //Serial.print("[AwsIotCoreOperations] Receive poll for topic: ");
+        //Serial.println(topicName.c_str());
         if (!EnsureSubscribed(topicName)) {
-            Serial.println("[AwsIotCoreOperations] Receive poll skipped (not subscribed/connected)");
+            //Serial.println("[AwsIotCoreOperations] Receive poll skipped (not subscribed/connected)");
             return result;
         }
 
@@ -197,14 +197,14 @@ class AwsIotCoreOperations : public IAwsIotCoreOperations {
 
         auto it = bufferedMessages.find(topicName);
         if (it == bufferedMessages.end()) {
-            Serial.println("[AwsIotCoreOperations] Receive poll: no messages buffered");
+            //Serial.println("[AwsIotCoreOperations] Receive poll: no messages buffered");
             return result;
         }
 
         result = it->second;
         bufferedMessages.erase(it);
-        Serial.print("[AwsIotCoreOperations] Receive poll: returning messages count = ");
-        Serial.println(static_cast<Int>(result.size()));
+        //Serial.print("[AwsIotCoreOperations] Receive poll: returning messages count = ");
+        //Serial.println(static_cast<Int>(result.size()));
         return result;
     }
 };

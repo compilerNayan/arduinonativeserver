@@ -13,66 +13,66 @@ class CloudOperations : public ICloudOperations {
     Public CloudOperations() = default;
 
     Public StdVector<StdString> RetrieveCommands() override {
-        Serial.println("[CloudOperations] RetrieveCommands() begin");
+        //Serial.println("[CloudOperations] RetrieveCommands() begin");
         if (dirty_.load(std::memory_order_relaxed)) {
-            Serial.println("[CloudOperations] RetrieveCommands skip: dirty");
+            //Serial.println("[CloudOperations] RetrieveCommands skip: dirty");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands skip: dirty"));
             return {};
         }
         if (operationInProgress_.exchange(true)) {
-            Serial.println("[CloudOperations] RetrieveCommands skip: operation in progress");
+            //Serial.println("[CloudOperations] RetrieveCommands skip: operation in progress");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands skip: operation already in progress"));
             return {};
         }
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
         if (awsIotCoreOperations_ == nullptr) {
-            Serial.println("[CloudOperations] RetrieveCommands failed: awsIotCoreOperations null");
+            //Serial.println("[CloudOperations] RetrieveCommands failed: awsIotCoreOperations null");
             if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: awsIotCoreOperations not available"));
             return {};
         }
-        Serial.println("[CloudOperations] Calling awsIotCoreOperations_->ReceiveMessages()");
+        //Serial.println("[CloudOperations] Calling awsIotCoreOperations_->ReceiveMessages()");
         StdVector<StdString> incoming = awsIotCoreOperations_->ReceiveMessages();
-        Serial.print("[CloudOperations] Raw incoming count=");
-        Serial.println(static_cast<Int>(incoming.size()));
+        //Serial.print("[CloudOperations] Raw incoming count=");
+        //Serial.println(static_cast<Int>(incoming.size()));
         StdVector<StdString> out;
         out.reserve(incoming.size());
         for (const auto& msg : incoming) {
-            Serial.print("[CloudOperations] Raw incoming payload: ");
-            Serial.println(msg.c_str());
+            //Serial.print("[CloudOperations] Raw incoming payload: ");
+            //Serial.println(msg.c_str());
             if (IsDonePayload(msg)) {
-                Serial.println("[CloudOperations] Payload treated as done marker");
+                //Serial.println("[CloudOperations] Payload treated as done marker");
                 if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: done payload received"));
                 continue;
             }
             StdString cmd = ParseCommandPayload(msg);
             if (!cmd.empty()) {
-                Serial.print("[CloudOperations] Parsed command: ");
-                Serial.println(cmd.c_str());
+                //Serial.print("[CloudOperations] Parsed command: ");
+                //Serial.println(cmd.c_str());
                 out.push_back(cmd);
             }
         }
-        Serial.print("[CloudOperations] Returning command count=");
-        Serial.println(static_cast<Int>(out.size()));
+        //Serial.print("[CloudOperations] Returning command count=");
+        //Serial.println(static_cast<Int>(out.size()));
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: got ") + std::to_string(out.size()) + " command(s)");
         return out;
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
-        Serial.print("[CloudOperations] PublishLogs() count=");
-        Serial.println(static_cast<Int>(logs.size()));
+        //Serial.print("[CloudOperations] PublishLogs() count=");
+        //Serial.println(static_cast<Int>(logs.size()));
         if (dirty_.load(std::memory_order_relaxed)) {
-            Serial.println("[CloudOperations] PublishLogs skip: dirty");
+            //Serial.println("[CloudOperations] PublishLogs skip: dirty");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: dirty"));
             return false;
         }
         if (operationInProgress_.exchange(true)) {
-            Serial.println("[CloudOperations] PublishLogs skip: operation in progress");
+            //Serial.println("[CloudOperations] PublishLogs skip: operation in progress");
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: operation already in progress"));
             return false;
         }
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
         if (awsIotCoreOperations_ == nullptr) {
-            Serial.println("[CloudOperations] PublishLogs failed: awsIotCoreOperations null");
+            //Serial.println("[CloudOperations] PublishLogs failed: awsIotCoreOperations null");
             if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: awsIotCoreOperations not available"));
             return false;
         }
@@ -85,18 +85,18 @@ class CloudOperations : public ICloudOperations {
         }
         char buf[1024];
         size_t n = serializeJson(doc, buf, sizeof(buf));
-        Serial.print("[CloudOperations] Serialized log payload size=");
-        Serial.println(static_cast<Int>(n));
+        //Serial.print("[CloudOperations] Serialized log payload size=");
+        //Serial.println(static_cast<Int>(n));
         if (n >= sizeof(buf)) {
-            Serial.println("[CloudOperations] PublishLogs failed: payload too large");
+            //Serial.println("[CloudOperations] PublishLogs failed: payload too large");
             if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: serialized payload too large"));
             return false;
         }
-        Serial.print("[CloudOperations] Sending payload: ");
-        Serial.println(buf);
+        //Serial.print("[CloudOperations] Sending payload: ");
+        //Serial.println(buf);
         Bool ok = awsIotCoreOperations_->SendMessage(StdString(buf, n));
-        Serial.print("[CloudOperations] awsIotCoreOperations_->SendMessage -> ");
-        Serial.println(ok ? "OK" : "FAILED");
+        //Serial.print("[CloudOperations] awsIotCoreOperations_->SendMessage -> ");
+        //Serial.println(ok ? "OK" : "FAILED");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: ") + (ok ? "ok" : "publish failed"));
         return ok;
     }
