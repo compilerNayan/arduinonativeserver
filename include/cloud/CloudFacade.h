@@ -152,7 +152,7 @@ class CloudFacade : public ICloudFacade {
         StdVector<StdString> commands = ops->RetrieveCommands();
         //Serial.print("[CloudFacade] RetrieveCommands count=");
         //Serial.println(static_cast<Int>(commands.size()));
-        if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: RetrieveCommands returned ") + std::to_string(commands.size()) + " command(s)");
+        //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: RetrieveCommands returned ") + std::to_string(commands.size()) + " command(s)");
         EnqueueAll(commands);
         if (TryDequeue(out)) {
             //Serial.print("[CloudFacade] GetCommand returning -> ");

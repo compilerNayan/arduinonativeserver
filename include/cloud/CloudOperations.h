@@ -27,7 +27,7 @@ class CloudOperations : public ICloudOperations {
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
         if (awsIotCoreOperations_ == nullptr) {
             //Serial.println("[CloudOperations] RetrieveCommands failed: awsIotCoreOperations null");
-            if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: awsIotCoreOperations not available"));
+            //if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: awsIotCoreOperations not available"));
             return {};
         }
         //Serial.println("[CloudOperations] Calling awsIotCoreOperations_->ReceiveMessages()");
