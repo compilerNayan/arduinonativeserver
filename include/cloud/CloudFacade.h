@@ -6,7 +6,7 @@
 #include "ICloudOperations.h"
 #include "CloudOperations.h"
 #include <ILogger.h>
-#include <INetworkStatusProvider.h>
+#include <IInternetConnectionStatusProvider.h>
 #include <Arduino.h>
 
 #include <queue>
@@ -23,7 +23,7 @@ class CloudFacade : public ICloudFacade {
     Private ILoggerPtr logger;
 
     /* @Autowired */
-    Private INetworkStatusProviderPtr networkStatusProvider_;
+    Private IInternetConnectionStatusProviderPtr internetConnectionStatusProvider_;
 
     Private std::queue<StdString> requestQueue_;
     Private std::mutex requestQueueMutex_;
@@ -83,7 +83,7 @@ class CloudFacade : public ICloudFacade {
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
         //Serial.print("[CloudFacade] PublishLogs() count=");
         //Serial.println(static_cast<Int>(logs.size()));
-        if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
+        if (internetConnectionStatusProvider_ && !internetConnectionStatusProvider_->IsInternetConnected()) {
             //Serial.println("[CloudFacade] PublishLogs skip: network not connected");
             //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: network not connected"));
             return false;
@@ -124,7 +124,7 @@ class CloudFacade : public ICloudFacade {
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand: from queue: ") + out);
             return out;
         }
-        if (networkStatusProvider_ && !networkStatusProvider_->IsNetworkConnected()) {
+        if (internetConnectionStatusProvider_ && !internetConnectionStatusProvider_->IsInternetConnected()) {
             //Serial.println("[CloudFacade] GetCommand skip: network not connected");
             //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] GetCommand skip: network not connected"));
             return StdString();
