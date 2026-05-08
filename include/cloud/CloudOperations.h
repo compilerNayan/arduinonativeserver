@@ -53,7 +53,7 @@ class CloudOperations : public ICloudOperations {
         }
         //Serial.print("[CloudOperations] Returning command count=");
         //Serial.println(static_cast<Int>(out.size()));
-        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: got ") + std::to_string(out.size()) + " command(s)");
+        //if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] RetrieveCommands: got ") + std::to_string(out.size()) + " command(s)");
         return out;
     }
 
