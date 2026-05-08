@@ -83,7 +83,7 @@ class CloudOperations : public ICloudOperations {
         for (const auto& p : logs) {
             root[std::to_string(p.first).c_str()] = p.second.c_str();
         }
-        char buf[1024];
+        char buf[4900];
         size_t n = serializeJson(doc, buf, sizeof(buf));
         //Serial.print("[CloudOperations] Serialized log payload size=");
         //Serial.println(static_cast<Int>(n));
