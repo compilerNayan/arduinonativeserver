@@ -81,13 +81,13 @@ class CloudFacade : public ICloudFacade {
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
-        //Serial.print("[CloudFacade] PublishLogs() count=");
-        //Serial.println(static_cast<Int>(logs.size()));
-        if (internetConnectionStatusProvider_ && !internetConnectionStatusProvider_->IsInternetConnected()) {
+        Serial.print("[CloudFacade] PublishLogs() count=");
+        Serial.println(static_cast<Int>(logs.size()));
+        /*if (internetConnectionStatusProvider_ && !internetConnectionStatusProvider_->IsInternetConnected()) {
             //Serial.println("[CloudFacade] PublishLogs skip: network not connected");
             //if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs skip: network not connected"));
             return false;
-        }
+        } */
         ICloudOperationsPtr ops;
         {
             std::lock_guard<std::mutex> lock(cloudOperationsMutex_);
@@ -111,7 +111,9 @@ class CloudFacade : public ICloudFacade {
         Bool ok = ops->PublishLogs(logs);
         //Serial.print("[CloudFacade] PublishLogs result -> ");
         //Serial.println(ok ? "OK" : "FAILED");
-        if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs ") + (ok ? "ok" : "failed"));
+        if(!ok) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudFacade] PublishLogs ") + (ok ? "ok" : "failed"));
+        }
         return ok;
     }
 
@@ -165,5 +167,4 @@ class CloudFacade : public ICloudFacade {
     }
 };
 
-#endif // CLOUDFACADE_H
 #endif // ARDUINO

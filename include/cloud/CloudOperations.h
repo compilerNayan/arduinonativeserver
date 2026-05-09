@@ -6,9 +6,6 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
 #include <ILogger.h>
 #include <atomic>
 
@@ -61,26 +58,24 @@ class CloudOperations : public ICloudOperations {
     }
 
     Public Bool PublishLogs(const StdMap<ULongLong, StdString>& logs) override {
-        //Serial.print("[CloudOperations] PublishLogs() count=");
-        //Serial.println(static_cast<Int>(logs.size()));
         if (dirty_.load(std::memory_order_relaxed)) {
-            //Serial.println("[CloudOperations] PublishLogs skip: dirty");
+            // Intentionally silent for high-frequency path.
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: dirty"));
             return false;
         }
         if (operationInProgress_.exchange(true)) {
-            //Serial.println("[CloudOperations] PublishLogs skip: operation in progress");
+            // Intentionally silent for high-frequency path.
             if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs skip: operation already in progress"));
             return false;
         }
         struct Guard { std::atomic<bool>& f; ~Guard() { f.store(false); } } g{operationInProgress_};
         if (awsIotCoreOperations_ == nullptr) {
-            //Serial.println("[CloudOperations] PublishLogs failed: awsIotCoreOperations null");
+            Serial.println("[CloudOperations] PublishLogs failed: awsIotCoreOperations null");
             if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: awsIotCoreOperations not available"));
             return false;
         }
         if (logs.empty()) return true;
-        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: publishing ") + std::to_string(logs.size()) + " log(s)");
+        //if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: publishing ") + std::to_string(logs.size()) + " log(s)");
         JsonDocument doc;
         JsonObject root = doc.to<JsonObject>();
         for (const auto& p : logs) {
@@ -88,19 +83,18 @@ class CloudOperations : public ICloudOperations {
         }
         char buf[4900];
         size_t n = serializeJson(doc, buf, sizeof(buf));
-        //Serial.print("[CloudOperations] Serialized log payload size=");
-        //Serial.println(static_cast<Int>(n));
         if (n >= sizeof(buf)) {
-            //Serial.println("[CloudOperations] PublishLogs failed: payload too large");
+            Serial.println("[CloudOperations] PublishLogs failed: payload too large");
             if (logger) logger->Error(Tag::Untagged, StdString("[CloudOperations] PublishLogs: serialized payload too large"));
             return false;
         }
-        //Serial.print("[CloudOperations] Sending payload: ");
-        //Serial.println(buf);
-        Bool ok = SendMessageWithWorkerTask(StdString(buf, n));
-        //Serial.print("[CloudOperations] awsIotCoreOperations_->SendMessage -> ");
-        //Serial.println(ok ? "OK" : "FAILED");
-        if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: ") + (ok ? "ok" : "publish failed"));
+        Bool ok = awsIotCoreOperations_->SendMessage(StdString(buf, n));
+        if (!ok) {
+            Serial.println("[CloudOperations] PublishLogs failed: send message");
+        }
+        if(!ok) {
+            if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: ") + (ok ? "ok" : "publish failed"));
+        }
         return ok;
     }
 
@@ -118,71 +112,6 @@ class CloudOperations : public ICloudOperations {
     Private ILoggerPtr logger;
     Private std::atomic<bool> operationInProgress_{false};
     Private std::atomic<bool> dirty_{false};
-
-    Private struct SendTaskContext {
-        CloudOperations* self;
-        StdString payload;
-        Bool result;
-        SemaphoreHandle_t done;
-    };
-
-    Private Static Void StaticSendTask(Void* raw) {
-        SendTaskContext* ctx = static_cast<SendTaskContext*>(raw);
-        if (ctx == nullptr || ctx->self == nullptr) {
-            vTaskDelete(nullptr);
-            return;
-        }
-        if (ctx->self->awsIotCoreOperations_ != nullptr) {
-            ctx->result = ctx->self->awsIotCoreOperations_->SendMessage(ctx->payload);
-        } else {
-            ctx->result = false;
-        }
-        if (ctx->done != nullptr) {
-            xSemaphoreGive(ctx->done);
-        }
-        vTaskDelete(nullptr);
-    }
-
-    Private Bool SendMessageWithWorkerTask(CStdString payload) {
-        constexpr UInt kTaskStackWords = 16384;
-        constexpr UInt kTaskTimeoutMs = 30000;
-
-        SendTaskContext ctx;
-        ctx.self = this;
-        ctx.payload = payload;
-        ctx.result = false;
-        ctx.done = xSemaphoreCreateBinary();
-        if (ctx.done == nullptr) {
-            return false;
-        }
-
-        TaskHandle_t task = nullptr;
-        BaseType_t created = xTaskCreatePinnedToCore(
-            StaticSendTask,
-            "cloudSendTask",
-            kTaskStackWords,
-            &ctx,
-            1,
-            &task,
-            tskNO_AFFINITY
-        );
-        if (created != pdPASS) {
-            vSemaphoreDelete(ctx.done);
-            return false;
-        }
-
-        Bool signaled = (xSemaphoreTake(ctx.done, pdMS_TO_TICKS(kTaskTimeoutMs)) == pdTRUE);
-        if (!signaled) {
-            if (task != nullptr) {
-                vTaskDelete(task);
-            }
-            vSemaphoreDelete(ctx.done);
-            return false;
-        }
-
-        vSemaphoreDelete(ctx.done);
-        return ctx.result;
-    }
 
     Private Bool IsDonePayload(CStdString payload) {
         if (payload.empty()) return false;
