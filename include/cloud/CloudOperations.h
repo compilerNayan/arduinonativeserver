@@ -6,6 +6,9 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 #include <ILogger.h>
 #include <atomic>
 
@@ -94,7 +97,7 @@ class CloudOperations : public ICloudOperations {
         }
         //Serial.print("[CloudOperations] Sending payload: ");
         //Serial.println(buf);
-        Bool ok = awsIotCoreOperations_->SendMessage(StdString(buf, n));
+        Bool ok = SendMessageWithWorkerTask(StdString(buf, n));
         //Serial.print("[CloudOperations] awsIotCoreOperations_->SendMessage -> ");
         //Serial.println(ok ? "OK" : "FAILED");
         if (logger) logger->Info(Tag::Untagged, StdString("[CloudOperations] PublishLogs: ") + (ok ? "ok" : "publish failed"));
@@ -115,6 +118,71 @@ class CloudOperations : public ICloudOperations {
     Private ILoggerPtr logger;
     Private std::atomic<bool> operationInProgress_{false};
     Private std::atomic<bool> dirty_{false};
+
+    Private struct SendTaskContext {
+        CloudOperations* self;
+        StdString payload;
+        Bool result;
+        SemaphoreHandle_t done;
+    };
+
+    Private Static Void StaticSendTask(Void* raw) {
+        SendTaskContext* ctx = static_cast<SendTaskContext*>(raw);
+        if (ctx == nullptr || ctx->self == nullptr) {
+            vTaskDelete(nullptr);
+            return;
+        }
+        if (ctx->self->awsIotCoreOperations_ != nullptr) {
+            ctx->result = ctx->self->awsIotCoreOperations_->SendMessage(ctx->payload);
+        } else {
+            ctx->result = false;
+        }
+        if (ctx->done != nullptr) {
+            xSemaphoreGive(ctx->done);
+        }
+        vTaskDelete(nullptr);
+    }
+
+    Private Bool SendMessageWithWorkerTask(CStdString payload) {
+        constexpr UInt kTaskStackWords = 16384;
+        constexpr UInt kTaskTimeoutMs = 30000;
+
+        SendTaskContext ctx;
+        ctx.self = this;
+        ctx.payload = payload;
+        ctx.result = false;
+        ctx.done = xSemaphoreCreateBinary();
+        if (ctx.done == nullptr) {
+            return false;
+        }
+
+        TaskHandle_t task = nullptr;
+        BaseType_t created = xTaskCreatePinnedToCore(
+            StaticSendTask,
+            "cloudSendTask",
+            kTaskStackWords,
+            &ctx,
+            1,
+            &task,
+            tskNO_AFFINITY
+        );
+        if (created != pdPASS) {
+            vSemaphoreDelete(ctx.done);
+            return false;
+        }
+
+        Bool signaled = (xSemaphoreTake(ctx.done, pdMS_TO_TICKS(kTaskTimeoutMs)) == pdTRUE);
+        if (!signaled) {
+            if (task != nullptr) {
+                vTaskDelete(task);
+            }
+            vSemaphoreDelete(ctx.done);
+            return false;
+        }
+
+        vSemaphoreDelete(ctx.done);
+        return ctx.result;
+    }
 
     Private Bool IsDonePayload(CStdString payload) {
         if (payload.empty()) return false;
