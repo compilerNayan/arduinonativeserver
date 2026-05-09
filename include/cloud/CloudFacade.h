@@ -167,4 +167,5 @@ class CloudFacade : public ICloudFacade {
     }
 };
 
+#endif // CLOUDFACADE_H
 #endif // ARDUINO
