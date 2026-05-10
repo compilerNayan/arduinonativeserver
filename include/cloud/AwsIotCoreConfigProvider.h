@@ -100,7 +100,7 @@ ZgfIjvc/bSZo6CWAI1KvVUbJF7FDhSmcRX/Lrx7zVbeMjGbhZkRLng==
     }
 
     Public Virtual StdString GetPublishTopic() const override {
-        return "nknk32/pub";
+        return "$aws/rules/NK_Logs/nknk32/pub";
     }
 
     Public Virtual StdString GetSubscribeTopic() const override {
